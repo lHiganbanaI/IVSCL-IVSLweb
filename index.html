@@ -1091,7 +1091,7 @@ function renderQAs(list, container) {
 async function loadAnnouncements() {
   let list = null;
   try {
-    const res = await fetch('data/bulletins.json', { cache: 'no-store' });
+    const res = await fetch('/IVSCL-IVSLweb/data/bulletins.json', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.announcements)) list = data.announcements;
