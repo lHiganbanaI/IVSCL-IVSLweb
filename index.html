@@ -429,31 +429,6 @@ main{flex:1;position:relative;z-index:1}
 .qa-item.is-open .qa-item__a-inner{padding-bottom:14px}
 .qa-item__a-inner .qa-a-mark{display:inline-block;font-weight:900;color:#9ff0e0;margin-right:4px}
 
-.about{padding:44px 0 10px}
-.about__head{text-align:center;margin-bottom:26px}
-.about__lead{
-  margin-top:14px;font-size:14px;line-height:1.95;color:var(--muted);
-  max-width:720px;margin-inline:auto;
-}
-.about__lead b{color:var(--gold-lt)}
-.about__grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.about-card{
-  background:linear-gradient(180deg,var(--panel-2),var(--panel));
-  border:1px solid var(--line);border-radius:16px;padding:26px 24px;transition:.25s;
-}
-.about-card:hover{
-  transform:translateY(-4px);border-color:var(--line-strong);
-  box-shadow:0 22px 44px -28px rgba(212,180,122,.7);
-}
-.about-card__icon{
-  width:48px;height:48px;border-radius:13px;
-  display:grid;place-items:center;font-size:22px;
-  background:linear-gradient(135deg,rgba(212,180,122,.18),rgba(166,139,212,.22));
-  border:1px solid var(--line);margin-bottom:16px;
-}
-.about-card h3{font-size:16px;font-weight:800;color:#fff;margin-bottom:10px;letter-spacing:.3px}
-.about-card p{font-size:13.5px;line-height:1.85;color:var(--muted)}
-
 .hosts{padding:44px 0 10px}
 .hosts__head{text-align:center;margin-bottom:26px}
 .hosts__title{
@@ -628,9 +603,6 @@ main{flex:1;position:relative;z-index:1}
   .stage{grid-template-columns:1fr}
   .bulletins__grid{grid-template-columns:1fr}
 }
-@media (max-width:900px){
-  .about__grid{grid-template-columns:1fr}
-}
 @media (max-width:860px){
   .topbar__inner{gap:12px;padding:11px 0}
   .bili-btn{margin-left:0;width:100%;justify-content:center}
@@ -752,7 +724,7 @@ main{flex:1;position:relative;z-index:1}
         <div class="film">
           <span class="film__badge">OFFICIAL FILM · 官方宣传片</span>
           <div class="film__media">
-            <img src="assets/misc/promo.jpg" alt="IVSCL & IVSL 联合赛季宣传图"
+            <img src="assets/杂项/promo.jpg" alt="IVSCL & IVSL 联合赛季宣传图"
                  decoding="async" data-zoom="宣传图">
           </div>
           <div class="film__bar">
@@ -792,34 +764,6 @@ main{flex:1;position:relative;z-index:1}
         </div>
       </section>
 
-      <section class="about reveal">
-        <div class="about__head">
-          <p class="section__eyebrow">ABOUT</p>
-          <h2 class="section__title">赛事介绍</h2>
-          <p class="about__lead">
-            IVSCL &amp; IVSL 联合赛季是全国高校第五人格技术竞技赛，
-            面向全国高校在读学生，<b>以热爱为笔，书写竞技新篇章</b>。
-          </p>
-        </div>
-        <div class="about__grid reveal-stagger">
-          <article class="about-card">
-            <div class="about-card__icon">🎮</div>
-            <h3>比赛项目</h3>
-            <p>本届赛事围绕《第五人格》展开，包含个人技术赛与团队对抗赛两个组别。</p>
-          </article>
-          <article class="about-card">
-            <div class="about-card__icon">🏆</div>
-            <h3>赛制亮点</h3>
-            <p>小组循环 + 双败淘汰，输一场仍有机会从败者组一路杀回总决赛。</p>
-          </article>
-          <article class="about-card">
-            <div class="about-card__icon">🎯</div>
-            <h3>参赛对象</h3>
-            <p>全国高校在读学生均可组队报名，凭学生证参赛，具体规则见赛事规则书。</p>
-          </article>
-        </div>
-      </section>
-
       <section class="hosts reveal">
         <div class="hosts__head">
           <h2 class="hosts__title">主办</h2>
@@ -828,7 +772,7 @@ main{flex:1;position:relative;z-index:1}
         <div class="hosts__grid reveal-stagger">
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
+              <img src="assets/人物图/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
                    loading="lazy" decoding="async" data-zoom="主办立绘 · 残响"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 1</div>
@@ -836,7 +780,7 @@ main{flex:1;position:relative;z-index:1}
           </figure>
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
+              <img src="assets/人物图/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
                    loading="lazy" decoding="async" data-zoom="主办立绘 · 老波"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 2</div>
@@ -844,7 +788,7 @@ main{flex:1;position:relative;z-index:1}
           </figure>
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
+              <img src="assets/人物图/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
                    loading="lazy" decoding="async" data-zoom="主办立绘 · 紫洋葱"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 3</div>
@@ -919,7 +863,7 @@ main{flex:1;position:relative;z-index:1}
       <a href="#">关于我们</a>
       <a href="#">联系方式</a>
       <a href="https://space.bilibili.com/563096834" target="_blank" rel="noopener">B站官号</a>
-      <a href="assets/misc/IVSCL赛事规则.pdf" target="_blank" rel="noopener">赛事规则</a>
+      <a href="assets/杂项/IVSCL赛事规则.pdf" target="_blank" rel="noopener">赛事规则</a>
     </div>
     <p class="footer__copy">© 2026 IVSCL &amp; IVSL 联合赛事组委会 · 保留所有权利</p>
   </div>
@@ -929,8 +873,8 @@ main{flex:1;position:relative;z-index:1}
   <div class="modal modal--gallery" role="dialog" aria-modal="true" aria-label="赛事报名信息">
     <button class="modal__close" id="modalClose" aria-label="关闭报名弹窗">✕</button>
     <div class="modal__gallery">
-      <img src="assets/misc/bm_1.jpg" alt="IVSCL & IVSL 赛事报名信息 1" decoding="async" data-zoom="报名信息 1">
-      <img src="assets/misc/bm_2.jpg" alt="IVSCL & IVSL 赛事报名信息 2" decoding="async" data-zoom="报名信息 2">
+      <img src="assets/杂项/bm_1.jpg" alt="IVSCL & IVSL 赛事报名信息 1" decoding="async" data-zoom="报名信息 1">
+      <img src="assets/杂项/bm_2.jpg" alt="IVSCL & IVSL 赛事报名信息 2" decoding="async" data-zoom="报名信息 2">
     </div>
   </div>
 </div>
