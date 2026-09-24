@@ -68,7 +68,34 @@ body::before{
     animation-duration:.01ms !important;animation-iteration-count:1 !important;
     transition-duration:.01ms !important;scroll-behavior:auto !important;
   }
+  .reveal{opacity:1 !important;transform:none !important;transition:none !important}
 }
+
+/* ============================================================
+   滚动渐显动画
+============================================================ */
+.reveal{
+  opacity:0;
+  transform:translateY(28px);
+  transition:
+    opacity .8s cubic-bezier(.2,.9,.3,1),
+    transform .8s cubic-bezier(.2,.9,.3,1);
+  will-change:opacity,transform;
+}
+.reveal.is-visible{opacity:1;transform:none}
+
+/* 卡片在渐显基础上再做一次轻微错峰（可选） */
+.reveal-stagger > *{
+  opacity:0;
+  transform:translateY(18px);
+  transition:
+    opacity .6s cubic-bezier(.2,.9,.3,1),
+    transform .6s cubic-bezier(.2,.9,.3,1);
+}
+.reveal-stagger.is-visible > *{opacity:1;transform:none}
+.reveal-stagger.is-visible > *:nth-child(1){transition-delay:.05s}
+.reveal-stagger.is-visible > *:nth-child(2){transition-delay:.15s}
+.reveal-stagger.is-visible > *:nth-child(3){transition-delay:.25s}
 
 /* 顶栏 */
 .topbar{
@@ -102,8 +129,22 @@ body::before{
 }
 .brand__text em{font-style:normal;font-size:10px;color:var(--muted);letter-spacing:1.6px}
 
+.bili-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  margin-left:auto;
+  padding:9px 18px;border-radius:10px;
+  font-size:13.5px;font-weight:800;
+  color:#fff;text-decoration:none;
+  background:linear-gradient(135deg,#fb7299,#e04b76);
+  border:1px solid rgba(255,255,255,.15);
+  box-shadow:0 8px 22px -12px rgba(251,114,153,.9);
+  transition:.22s;white-space:nowrap;
+}
+.bili-btn:hover{transform:translateY(-2px);box-shadow:0 12px 28px -12px rgba(251,114,153,1)}
+.bili-btn__icon{font-size:15px}
+
 .tabs{
-  margin-left:auto;display:flex;gap:5px;
+  margin-left:0;display:flex;gap:5px;
   background:rgba(255,255,255,.035);
   border:1px solid var(--line);padding:5px;border-radius:12px;
 }
@@ -182,24 +223,13 @@ main{flex:1;position:relative;z-index:1}
 .notice-bar__more:hover{color:var(--gold-lt);background:rgba(212,175,106,.1)}
 
 /* 墙头 */
-.hero-board{text-align:center;padding:34px 0 10px}
-.hero-board__marks{display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:16px}
-.hero-board__logo{
-  width:62px;height:62px;border-radius:50%;object-fit:cover;display:block;background:#0a1526;
-  border:1.5px solid rgba(212,175,106,.4);
-  box-shadow:0 0 0 4px rgba(212,175,106,.06),0 12px 26px -14px rgba(212,175,106,.75);
-}
-.hero-board__logo--b{
-  border-color:rgba(166,139,212,.45);
-  box-shadow:0 0 0 4px rgba(166,139,212,.06),0 12px 26px -14px rgba(166,139,212,.75);
-}
-.hero-board__join{font-size:18px;font-weight:900;color:var(--gold);opacity:.85}
+.hero-board{text-align:center;padding:44px 0 14px}
 .hero-board__title{
-  font-size:clamp(24px,4vw,36px);font-weight:900;letter-spacing:1px;
+  font-size:clamp(26px,4.2vw,38px);font-weight:900;letter-spacing:1px;
   background:linear-gradient(100deg,var(--gold-lt),#fff 45%,var(--purple-lt));
   -webkit-background-clip:text;background-clip:text;color:transparent;
 }
-.hero-board__sub{margin-top:8px;font-size:13px;color:var(--muted);letter-spacing:2px}
+.hero-board__sub{margin-top:10px;font-size:13px;color:var(--muted);letter-spacing:2px}
 
 /* 主体 */
 .stage{
@@ -289,6 +319,7 @@ main{flex:1;position:relative;z-index:1}
   pointer-events:none;
 }
 .film__media video,.film__media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.film__media img{cursor:zoom-in}
 .film__placeholder{position:relative;text-align:center;padding:20px;z-index:1}
 .film__play{
   width:74px;height:74px;border-radius:50%;display:grid;place-items:center;margin:0 auto 16px;
@@ -350,13 +381,13 @@ main{flex:1;position:relative;z-index:1}
 }
 .board__list{
   list-style:none;padding:8px 8px 12px;
-  display:flex;flex-direction:column;max-height:320px;overflow-y:auto;
+  display:flex;flex-direction:column;max-height:360px;overflow-y:auto;
   scrollbar-width:thin;scrollbar-color:rgba(212,175,106,.35) transparent;
   overscroll-behavior:contain;
 }
 .board__list::-webkit-scrollbar{width:5px}
 .board__list::-webkit-scrollbar-thumb{background:rgba(212,175,106,.35);border-radius:4px}
-.board__list li{padding:12px 14px;border-radius:10px;transition:.2s;cursor:pointer}
+.board__list li{padding:12px 14px;border-radius:10px;transition:.2s}
 .board__list li:hover{background:rgba(212,175,106,.07)}
 .board__list li + li{border-top:1px dashed var(--line);border-radius:0}
 
@@ -373,6 +404,109 @@ main{flex:1;position:relative;z-index:1}
 
 .board__state{padding:36px 20px;text-align:center;font-size:13px;color:var(--muted);letter-spacing:.5px}
 .board__state b{color:var(--gold-lt)}
+
+/* ---------- Q&A 手风琴 ---------- */
+.qa-list{padding:8px 8px 12px}
+.qa-item{
+  border-radius:10px;
+  transition:background .2s;
+}
+.qa-item + .qa-item{border-top:1px dashed var(--line)}
+.qa-item__q{
+  width:100%;
+  appearance:none;border:0;background:transparent;
+  color:inherit;font:inherit;text-align:left;
+  padding:13px 14px;
+  display:flex;align-items:flex-start;gap:10px;
+  cursor:pointer;border-radius:10px;
+  transition:background .2s;
+}
+.qa-item__q:hover{background:rgba(212,175,106,.07)}
+.qa-item__q:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;border-radius:10px}
+
+.qa-item__mark{
+  flex:0 0 auto;
+  width:22px;height:22px;border-radius:6px;
+  display:grid;place-items:center;
+  font-size:11px;font-weight:900;letter-spacing:.5px;
+  background:rgba(120,220,200,.16);
+  border:1px solid rgba(120,220,200,.38);
+  color:#9ff0e0;
+  margin-top:1px;
+}
+.qa-item__text{
+  flex:1;
+  font-size:13.5px;line-height:1.75;color:#e2e9f5;
+  font-weight:700;
+}
+.qa-item__arrow{
+  flex:0 0 auto;
+  font-size:11px;color:var(--muted);
+  transition:transform .3s ease,color .2s;
+  margin-top:4px;
+}
+.qa-item.is-open .qa-item__arrow{transform:rotate(180deg);color:var(--gold)}
+.qa-item.is-open .qa-item__q{background:rgba(212,175,106,.05)}
+
+.qa-item__a{
+  display:grid;
+  grid-template-rows:0fr;
+  transition:grid-template-rows .32s cubic-bezier(.2,.9,.3,1);
+}
+.qa-item.is-open .qa-item__a{grid-template-rows:1fr}
+.qa-item__a-inner{
+  overflow:hidden;
+  padding:0 14px 0 46px;
+  font-size:13px;line-height:1.85;color:#b8c5da;
+}
+.qa-item.is-open .qa-item__a-inner{padding-bottom:14px}
+.qa-item__a-inner b{color:var(--gold-lt)}
+.qa-item__a-inner .qa-a-mark{
+  display:inline-block;
+  font-weight:900;
+  color:#9ff0e0;
+  margin-right:4px;
+}
+
+/* 赛事介绍 */
+.about{padding:44px 0 10px}
+.about__head{text-align:center;margin-bottom:26px}
+.about__lead{
+  margin-top:14px;
+  font-size:14px;line-height:1.95;color:var(--muted);
+  max-width:720px;margin-inline:auto;
+}
+.about__lead b{color:var(--gold-lt)}
+.about__grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+}
+.about-card{
+  background:linear-gradient(180deg,#12213c,#0e1b32);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:26px 24px;
+  transition:.25s;
+}
+.about-card:hover{
+  transform:translateY(-4px);
+  border-color:var(--line-strong);
+  box-shadow:0 22px 44px -28px rgba(212,175,106,.6);
+}
+.about-card__icon{
+  width:48px;height:48px;border-radius:13px;
+  display:grid;place-items:center;font-size:22px;
+  background:linear-gradient(135deg,rgba(212,175,106,.16),rgba(166,139,212,.2));
+  border:1px solid var(--line);margin-bottom:16px;
+}
+.about-card h3{
+  font-size:16px;font-weight:800;color:#fff;
+  margin-bottom:10px;letter-spacing:.3px;
+}
+.about-card p{
+  font-size:13.5px;line-height:1.85;color:var(--muted);
+}
 
 /* 主办立绘 */
 .hosts{padding:44px 0 10px}
@@ -401,6 +535,7 @@ main{flex:1;position:relative;z-index:1}
 .host-figure__media img{
   max-width:100%;max-height:260px;object-fit:contain;display:block;
   filter:drop-shadow(0 16px 28px rgba(0,0,0,.6));transition:.35s;
+  cursor:zoom-in;
 }
 .host-figure:hover .host-figure__media img{transform:scale(1.04)}
 .host-figure__ph{
@@ -489,7 +624,7 @@ main{flex:1;position:relative;z-index:1}
 }
 .modal__gallery::-webkit-scrollbar{width:5px}
 .modal__gallery::-webkit-scrollbar-thumb{background:rgba(212,175,106,.35);border-radius:4px}
-.modal__gallery img{display:block;width:100%;height:auto}
+.modal__gallery img{display:block;width:100%;height:auto;cursor:zoom-in}
 .modal__close{
   position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;
   border:1px solid rgba(255,255,255,.15);
@@ -499,6 +634,52 @@ main{flex:1;position:relative;z-index:1}
   cursor:pointer;transition:.2s;font-family:inherit;line-height:1;z-index:2;
 }
 .modal__close:hover{background:rgba(212,175,106,.85);border-color:rgba(212,175,106,.85);color:#0a1526}
+
+/* ============================================================
+   图片放大 Lightbox
+============================================================ */
+.lightbox{
+  position:fixed;inset:0;z-index:300;
+  background:rgba(2,6,14,.94);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  display:none;align-items:center;justify-content:center;
+  padding:24px;
+  cursor:zoom-out;
+  overscroll-behavior:contain;
+}
+.lightbox.is-open{display:flex;animation:maskIn .25s ease}
+.lightbox__img{
+  max-width:94vw;
+  max-height:88vh;
+  object-fit:contain;
+  border-radius:14px;
+  box-shadow:
+    0 0 0 1px rgba(212,175,106,.2),
+    0 44px 90px -30px rgba(0,0,0,.95);
+  animation:lbIn .3s cubic-bezier(.2,.9,.3,1.15);
+  cursor:default;
+}
+@keyframes lbIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+.lightbox__close{
+  position:absolute;top:20px;right:20px;
+  width:44px;height:44px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.18);
+  background:rgba(10,21,38,.75);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  color:#fff;font-size:20px;
+  display:grid;place-items:center;
+  cursor:pointer;transition:.2s;font-family:inherit;line-height:1;
+}
+.lightbox__close:hover{
+  background:rgba(212,175,106,.85);
+  border-color:rgba(212,175,106,.85);
+  color:#0a1526;
+}
+.lightbox__hint{
+  position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+  font-size:12px;letter-spacing:1px;color:rgba(255,255,255,.45);
+  pointer-events:none;
+}
 
 /* 页脚 */
 .footer{
@@ -526,8 +707,12 @@ main{flex:1;position:relative;z-index:1}
   .stage{grid-template-columns:1fr}
   .bulletins__grid{grid-template-columns:1fr}
 }
+@media (max-width:900px){
+  .about__grid{grid-template-columns:1fr}
+}
 @media (max-width:860px){
   .topbar__inner{gap:12px;padding:11px 0}
+  .bili-btn{margin-left:0;width:100%;justify-content:center}
   .tabs{margin-left:0;width:100%;overflow-x:auto;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
   .tab{flex:1;padding:9px 12px;font-size:13px;text-align:center;justify-content:center}
@@ -536,8 +721,7 @@ main{flex:1;position:relative;z-index:1}
   .brand__logo{width:34px;height:34px}
   .brand__text b{font-size:13.5px}
   .brand__text em{font-size:9px;letter-spacing:1.1px}
-  .hero-board{padding:26px 0 6px}
-  .hero-board__logo{width:52px;height:52px}
+  .hero-board{padding:32px 0 8px}
   .notice-bar__inner{font-size:12.5px}
   .notice-bar__more{margin-left:0;width:100%}
   .film__play{width:62px;height:62px;font-size:22px}
@@ -549,6 +733,9 @@ main{flex:1;position:relative;z-index:1}
   .locked__card{padding:40px 22px}
   .modal{padding:26px 20px 22px}
   .cd b{font-size:18px}
+  .qa-item__a-inner{padding-left:14px}
+  .lightbox{padding:14px}
+  .lightbox__close{top:12px;right:12px;width:38px;height:38px}
 }
 @media (hover:none){
   .btn:hover{transform:none!important;box-shadow:none!important}
@@ -572,6 +759,12 @@ main{flex:1;position:relative;z-index:1}
         <b>IVSCL &amp; IVSL</b>
         <em>联合官网 · JOINT OFFICIAL SITE</em>
       </span>
+    </a>
+
+    <!-- B 站直播间按钮：替换 href 为自己的直播间地址 -->
+    <a class="bili-btn" href="https://live.bilibili.com/" target="_blank" rel="noopener">
+      <span class="bili-btn__icon">📺</span>
+      <span>B站直播间</span>
     </a>
 
     <nav class="tabs" role="tablist" aria-label="主导航">
@@ -601,12 +794,8 @@ main{flex:1;position:relative;z-index:1}
 
     <div class="wrap">
 
+      <!-- 墙头 -->
       <div class="hero-board">
-        <div class="hero-board__marks">
-          <img class="hero-board__logo" src="assets/loge/loge_IVSCL.jpg" alt="IVSCL logo" decoding="async">
-          <span class="hero-board__join" aria-hidden="true">×</span>
-          <img class="hero-board__logo hero-board__logo--b" src="assets/loge/loge_IVSL.jpg" alt="IVSL logo" decoding="async">
-        </div>
         <h1 class="hero-board__title">赛事公告墙</h1>
         <p class="hero-board__sub">最新动态 · 赛事宣传片 · 主办信息</p>
       </div>
@@ -653,26 +842,20 @@ main{flex:1;position:relative;z-index:1}
         <div class="film">
           <span class="film__badge">OFFICIAL FILM · 官方宣传片</span>
           <div class="film__media">
-            <!-- <video src="assets/宣传片/ivscl-ivsl-promo.mp4" poster="assets/宣传片/cover.jpg" controls playsinline preload="metadata"></video> -->
-            <div class="film__placeholder">
-              <div class="film__play" aria-hidden="true">▶</div>
-              <h3>IVSCL × IVSL 联合赛季宣传片</h3>
-              <p>
-                2026 · 全国高校电子竞技联赛<br>
-                宣传片文件放入 <b>assets/宣传片/</b> 目录后替换 video 标签即可
-              </p>
-            </div>
+            <img src="assets/杂项/promo.jpg" alt="IVSCL & IVSL 联合赛季宣传图"
+                 decoding="async" data-zoom="宣传图">
           </div>
           <div class="film__bar">
             <b>联合赛季</b>
             <span>2026 · 10 月 1 日开赛</span>
-            <button class="btn btn--primary btn--sm" disabled>赛程即将公布</button>
+            <a class="btn btn--primary btn--sm" href="https://www.bilibili.com/" target="_blank" rel="noopener">在 B 站观看</a>
           </div>
         </div>
 
       </div>
 
-      <section class="bulletins">
+      <!-- ================= 布告栏 ================= -->
+      <section class="bulletins reveal">
         <div class="bulletins__head">
           <h2 class="bulletins__title">布告栏</h2>
           <p class="bulletins__sub">BULLETIN BOARDS</p>
@@ -697,7 +880,7 @@ main{flex:1;position:relative;z-index:1}
               <span class="board__title">赛事 Q&amp;A</span>
               <span class="board__count" data-count="qas">--</span>
             </div>
-            <ul class="board__list" data-board="qas" aria-live="polite" aria-busy="true">
+            <ul class="board__list qa-list" data-board="qas" aria-live="polite" aria-busy="true">
               <li class="board__state">正在加载 Q&amp;A…</li>
             </ul>
           </div>
@@ -705,17 +888,50 @@ main{flex:1;position:relative;z-index:1}
         </div>
       </section>
 
-      <section class="hosts">
+      <!-- ================= 赛事介绍 ================= -->
+      <section class="about reveal">
+        <div class="about__head">
+          <p class="section__eyebrow">ABOUT</p>
+          <h2 class="section__title">赛事介绍</h2>
+          <p class="about__lead">
+            IVSCL &amp; IVSL 联合赛季是全国高校第五人格技术竞技赛，
+            面向全国高校在读学生，<b>以热爱为笔，书写竞技新篇章</b>。
+          </p>
+        </div>
+
+        <div class="about__grid reveal-stagger">
+          <article class="about-card">
+            <div class="about-card__icon">🎮</div>
+            <h3>比赛项目</h3>
+            <p>本届赛事围绕《第五人格》展开，包含个人技术赛与团队对抗赛两个组别。</p>
+          </article>
+
+          <article class="about-card">
+            <div class="about-card__icon">🏆</div>
+            <h3>赛制亮点</h3>
+            <p>小组循环 + 双败淘汰，输一场仍有机会从败者组一路杀回总决赛。</p>
+          </article>
+
+          <article class="about-card">
+            <div class="about-card__icon">🎯</div>
+            <h3>参赛对象</h3>
+            <p>全国高校在读学生均可组队报名，凭学生证参赛，具体规则见赛事规则书。</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= 主办 ================= -->
+      <section class="hosts reveal">
         <div class="hosts__head">
           <h2 class="hosts__title">主办</h2>
           <p class="hosts__sub">ORGANIZERS</p>
         </div>
 
-        <div class="hosts__grid">
+        <div class="hosts__grid reveal-stagger">
           <figure class="host-figure">
             <div class="host-figure__media">
               <img src="assets/人物图/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
-                   loading="lazy" decoding="async"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 残响"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 1</div>
             </div>
@@ -724,7 +940,7 @@ main{flex:1;position:relative;z-index:1}
           <figure class="host-figure">
             <div class="host-figure__media">
               <img src="assets/人物图/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
-                   loading="lazy" decoding="async"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 老波"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 2</div>
             </div>
@@ -733,7 +949,7 @@ main{flex:1;position:relative;z-index:1}
           <figure class="host-figure">
             <div class="host-figure__media">
               <img src="assets/人物图/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
-                   loading="lazy" decoding="async"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 紫洋葱"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 3</div>
             </div>
@@ -741,7 +957,7 @@ main{flex:1;position:relative;z-index:1}
         </div>
       </section>
 
-      <div class="cta">
+      <div class="cta reveal">
         <div class="cta__inner">
           <h2 class="cta__title">报名通道现已开启</h2>
           <p class="cta__desc">2026 年 10 月 1 日开赛 · 敬请期待</p>
@@ -813,14 +1029,22 @@ main{flex:1;position:relative;z-index:1}
   </div>
 </footer>
 
+<!-- ================= 报名弹窗 ================= -->
 <div class="modal-mask" id="signupModal" aria-hidden="true">
   <div class="modal modal--gallery" role="dialog" aria-modal="true" aria-label="赛事报名信息">
     <button class="modal__close" id="modalClose" aria-label="关闭报名弹窗">✕</button>
     <div class="modal__gallery">
-      <img src="assets/杂项/bm_1.jpg" alt="IVSCL & IVSL 赛事报名信息 1" decoding="async">
-      <img src="assets/杂项/bm_2.jpg" alt="IVSCL & IVSL 赛事报名信息 2" decoding="async">
+      <img src="assets/杂项/bm_1.jpg" alt="IVSCL & IVSL 赛事报名信息 1" decoding="async" data-zoom="报名信息 1">
+      <img src="assets/杂项/bm_2.jpg" alt="IVSCL & IVSL 赛事报名信息 2" decoding="async" data-zoom="报名信息 2">
     </div>
   </div>
+</div>
+
+<!-- ================= 图片放大 Lightbox ================= -->
+<div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-label="图片预览">
+  <button class="lightbox__close" id="lightboxClose" aria-label="关闭预览">✕</button>
+  <img class="lightbox__img" id="lightboxImg" src="" alt="">
+  <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
 <script>
@@ -987,7 +1211,89 @@ function formatTime(input) {
 })();
 
 /* ============================================================
-   五、布告栏数据加载
+   五、滚动渐显动画
+============================================================ */
+(function revealOnScroll() {
+  const items = document.querySelectorAll('.reveal, .reveal-stagger');
+  if (!items.length) return;
+
+  // 不支持 IntersectionObserver 时直接显示
+  if (!('IntersectionObserver' in window)) {
+    items.forEach(el => el.classList.add('is-visible'));
+    return;
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, {
+    threshold: 0.12,
+    rootMargin: '0px 0px -40px 0px'
+  });
+
+  items.forEach(el => io.observe(el));
+})();
+
+/* ============================================================
+   六、图片放大 Lightbox
+============================================================ */
+(function lightbox() {
+  const box   = document.getElementById('lightbox');
+  const img   = document.getElementById('lightboxImg');
+  const close = document.getElementById('lightboxClose');
+  if (!box || !img) return;
+
+  let lastFocused = null;
+
+  function open(src, alt) {
+    lastFocused = document.activeElement;
+    img.src = src;
+    img.alt = alt || '';
+    box.classList.add('is-open');
+    box.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => close.focus());
+  }
+
+  function hide() {
+    box.classList.remove('is-open');
+    box.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    // 清空 src 释放大图内存
+    setTimeout(() => { if (!box.classList.contains('is-open')) img.src = ''; }, 300);
+    if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+  }
+
+  // 通过事件委托监听所有带 data-zoom 的图片（包括动态渲染的）
+  document.addEventListener('click', e => {
+    const target = e.target.closest('img[data-zoom]');
+    if (target) {
+      // 弹窗打开时，需要避免和弹窗关闭冲突
+      e.stopPropagation();
+      open(target.src, target.alt || target.dataset.zoom);
+    }
+  });
+
+  close.addEventListener('click', hide);
+  box.addEventListener('click', e => {
+    // 点击图片本身不关闭，点击空白或关闭按钮关闭
+    if (e.target === box) hide();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (box.classList.contains('is-open') && e.key === 'Escape') {
+      e.preventDefault();
+      hide();
+    }
+  });
+})();
+
+/* ============================================================
+   七、布告栏数据加载
    公告栏：data/bulletins.json
    Q&A：data/qas.csv（支持两列"问题,回答"或三列"时间,问题,回答"）
 ============================================================ */
@@ -1063,35 +1369,49 @@ function renderAnnouncements(list, container) {
   return list.length;
 }
 
-/* Q&A 渲染：不显示时间 */
+/* Q&A 手风琴渲染 */
 function renderQAs(list, container) {
   if (!list || !list.length) {
     container.innerHTML = '<li class="board__state">暂无 Q&amp;A</li>';
     return 0;
   }
-  container.innerHTML = list.map(item => {
+
+  container.innerHTML = list.map((item, i) => {
     const question = sanitize(item.question || '');
     const answer   = sanitize(item.answer || '');
+    const id       = 'qa-' + i;
     return `
-      <li>
-        <div class="msg__top">
-          <span class="msg__tag tag--qa">Q&amp;A</span>
+      <li class="qa-item" data-qa>
+        <button class="qa-item__q" type="button" aria-expanded="false" aria-controls="${id}">
+          <span class="qa-item__mark" aria-hidden="true">Q</span>
+          <span class="qa-item__text">${question}</span>
+          <span class="qa-item__arrow" aria-hidden="true">▾</span>
+        </button>
+        <div class="qa-item__a" id="${id}" role="region">
+          <div class="qa-item__a-inner">
+            <span class="qa-a-mark">A：</span>${answer}
+          </div>
         </div>
-        <p class="msg__text">
-          <b>Q：</b>${question}<br>
-          <b>A：</b>${answer}
-        </p>
       </li>
     `;
   }).join('');
+
+  // 绑定手风琴
+  container.querySelectorAll('.qa-item').forEach(item => {
+    const btn = item.querySelector('.qa-item__q');
+    btn.addEventListener('click', () => {
+      const isOpen = item.classList.toggle('is-open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+  });
+
   return list.length;
 }
 
-/* 加载公告栏（JSON） */
 async function loadAnnouncements() {
   let list = null;
   try {
-    const res = await fetch('/IVSCL-IVSLweb/data/bulletins.json', { cache: 'no-store' });
+    const res = await fetch('data/bulletins.json', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.announcements)) list = data.announcements;
@@ -1110,11 +1430,6 @@ async function loadAnnouncements() {
   if (box) box.setAttribute('aria-busy', 'false');
 }
 
-/* 加载 Q&A（CSV）
-   支持两种格式：
-   - 两列：问题,回答
-   - 三列：时间,问题,回答（时间会被自动忽略）
-*/
 async function loadQAs() {
   let list = null;
   try {
@@ -1123,13 +1438,10 @@ async function loadQAs() {
       const text = await res.text();
       const rows = parseCSV(text);
       if (rows.length) {
-        // 检测表头
         const head = rows[0].join(',').toLowerCase();
         const hasHeader = /问题|回答|时间|日期|question|answer|time|date/.test(head);
         const dataRows = rows.slice(hasHeader ? 1 : 0);
 
-        // 判断列数：如果第一行有 3 列且第一列像日期，就用"时间,问题,回答"格式；
-        // 否则用"问题,回答"格式。
         const first = dataRows.find(r => r.some(c => c.trim())) || [];
         const isThreeCol = first.length >= 3;
 
