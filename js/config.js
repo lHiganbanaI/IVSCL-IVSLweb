@@ -44,10 +44,34 @@ export const DEFAULT_HISTORY = [
 ];
 
 export const DEFAULT_THANKS = [
-  { category: "代理", icon: "🎯", members: ["咸鱼老师", "残响老师", "cherry老师"] },
-  { category: "解说", icon: "🎙", members: ["多兰老师", "三笔老师"] },
-  { category: "裁判", icon: "⚖️", members: ["Eremos老师", "夏末の晨曦老师"] },
-  { category: "合作", icon: "🤝", members: ["idvevent第五人格bp软件"] }
+  {
+    category: "代理", icon: "🎯",
+    members: [
+      { name: "咸鱼老师",   avatar: "xianyu"   },
+      { name: "残响老师",   avatar: "canxiang" },
+      { name: "cherry老师", avatar: "cherry"   }
+    ]
+  },
+  {
+    category: "解说", icon: "🎙",
+    members: [
+      { name: "多兰老师", avatar: "duolan" },
+      { name: "三笔老师", avatar: "sanbi"  }
+    ]
+  },
+  {
+    category: "裁判", icon: "⚖️",
+    members: [
+      { name: "Eremos老师",    avatar: "eremos" },
+      { name: "夏末の晨曦老师", avatar: "xiamo"  }
+    ]
+  },
+  {
+    category: "合作", icon: "🤝",
+    members: [
+      { name: "idvevent第五人格bp软件", avatar: "idvevent" }
+    ]
+  }
 ];
 
 /* ============================================================

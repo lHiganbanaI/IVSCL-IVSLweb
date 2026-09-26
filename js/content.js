@@ -245,12 +245,35 @@ function renderThanks(list, container) {
     const icon     = item.icon || '🤝';
     const members  = Array.isArray(item.members) ? item.members : [];
     const sub      = THANKS_SUB_MAP[category] || 'MEMBER';
-    const rows = members.map(m => `
-      <li class="thanks-card__member">
-        <span class="thanks-card__avatar" aria-hidden="true">${sanitize(getInitial(m))}</span>
-        <span class="thanks-card__name">${sanitize(m)}</span>
-      </li>
-    `).join('');
+
+    const rows = members.map(m => {
+      /* 兼容两种格式：
+         - 字符串：只有名字
+         - 对象：{ name, avatar }
+      */
+      const name   = typeof m === 'string' ? m : (m.name || '');
+      const avatar = typeof m === 'string' ? null : m.avatar;
+
+      const nameSafe = sanitize(name);
+      const initial  = sanitize(getInitial(name));
+
+      /* 有 avatar 就渲染图片，没有就 fallback 到首字母 */
+      const avatarHtml = avatar
+        ? `<img class="thanks-card__avatar thanks-card__avatar--img"
+                src="assets/avatars/${sanitize(avatar)}.jpg"
+                alt="${nameSafe}"
+                loading="lazy"
+                onerror="this.outerHTML='<span class=&quot;thanks-card__avatar&quot;>${initial}</span>'">`
+        : `<span class="thanks-card__avatar">${initial}</span>`;
+
+      return `
+        <li class="thanks-card__member">
+          ${avatarHtml}
+          <span class="thanks-card__name">${nameSafe}</span>
+        </li>
+      `;
+    }).join('');
+
     return `
       <div class="thanks-card" data-category="${category}">
         <div class="thanks-card__head">
