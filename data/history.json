@@ -1,0 +1,23 @@
+{
+  "history": [
+    {
+      "event": "IVSL 25年 · 夏季赛",
+      "champion": { "name": "进才中学", "short": "jczx" },
+      "runnerUp": { "name": "华理科中", "short": "hlkz" }
+    },
+    {
+      "event": "IVSL 25年 · 冬季赛",
+      "champion": { "name": "进才中学", "short": "jczx" },
+      "runnerUp": { "name": "华理科中", "short": "hlkz" }
+    },
+    {
+      "event": "IVSL 26年 · 夏季赛",
+      "champion": { "name": "HX", "short": "hx" },
+      "runnerUp": { "name": "RES.T1", "short": "rest1" }
+    },
+    {
+      "event": "IVSCL 26年 · 秋季赛",
+      "upcoming": true
+    }
+  ]
+}

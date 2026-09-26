@@ -1,0 +1,24 @@
+{
+  "thanks": [
+    {
+      "category": "代理",
+      "icon": "🎯",
+      "members": ["咸鱼老师", "残响老师", "cherry老师"]
+    },
+    {
+      "category": "解说",
+      "icon": "🎙",
+      "members": ["多兰老师", "三笔老师"]
+    },
+    {
+      "category": "裁判",
+      "icon": "⚖️",
+      "members": ["Eremos老师", "夏末の晨曦老师"]
+    },
+    {
+      "category": "合作",
+      "icon": "🤝",
+      "members": ["idvevent第五人格bp软件"]
+    }
+  ]
+}

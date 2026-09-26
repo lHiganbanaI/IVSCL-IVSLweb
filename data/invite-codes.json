@@ -1,0 +1,9 @@
+{
+  "codes": [
+    { "code": "ADMIN-2026", "role": "admin",  "label": "管理员" },
+    { "code": "TEAM-2026",  "role": "team",   "label": "参赛队伍" },
+    { "code": "JUDGE-2026", "role": "judge",  "label": "裁判" },
+    { "code": "PRESS-2026", "role": "press",  "label": "媒体" },
+    { "code": "FAN-2026",   "role": "fan",    "label": "观众" }
+  ]
+}

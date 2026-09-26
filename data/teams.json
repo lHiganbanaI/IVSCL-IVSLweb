@@ -1,0 +1,8 @@
+{
+  "teams": [
+    { "name": "进才中学", "short": "jczx"  },
+    { "name": "华理科中", "short": "hlkz"  },
+    { "name": "HX",       "short": "hx"    },
+    { "name": "RES.T1",   "short": "rest1" }
+  ]
+}
