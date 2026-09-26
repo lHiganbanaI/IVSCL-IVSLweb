@@ -3,22 +3,36 @@
     {
       "category": "代理",
       "icon": "🎯",
-      "members": ["咸鱼老师", "残响老师", "cherry老师"]
+      "members": [
+        { "name": "咸鱼老师",   "avatar": "xianyu"   },
+        { "name": "残响老师",   "avatar": "canxiang" },
+        { "name": "cherry老师", "avatar": "cherry"   }
+      ]
     },
     {
       "category": "解说",
       "icon": "🎙",
-      "members": ["多兰老师", "三笔老师"]
+      "members": [
+        { "name": "多兰老师", "avatar": "duolan" },
+        { "name": "三笔老师", "avatar": "sanbi"  }
+      ]
     },
     {
       "category": "裁判",
       "icon": "⚖️",
-      "members": ["Eremos老师", "夏末の晨曦老师"]
+      "members": [
+        { "name": "Eremos老师",    "avatar": "eremos" },
+        { "name": "夏末の晨曦老师", "avatar": "xiamo"  }
+      ]
     },
     {
       "category": "合作",
       "icon": "🤝",
-      "members": ["idvevent第五人格bp软件"]
+      "members": [
+        { "name": "南台杯", "avatar": "nantaibei" },
+        { "name": "idvevent第五人格bp软件", "avatar": "idvevent" }
+       
+      ]
     }
   ]
 }
