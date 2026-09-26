@@ -247,23 +247,19 @@ function renderThanks(list, container) {
     const sub      = THANKS_SUB_MAP[category] || 'MEMBER';
 
     const rows = members.map(m => {
-      /* 兼容两种格式：
-         - 字符串：只有名字
-         - 对象：{ name, avatar }
-      */
+      /* 兼容两种格式：字符串 或 { name, avatar } */
       const name   = typeof m === 'string' ? m : (m.name || '');
       const avatar = typeof m === 'string' ? null : m.avatar;
 
       const nameSafe = sanitize(name);
       const initial  = sanitize(getInitial(name));
 
-      /* 有 avatar 就渲染图片，没有就 fallback 到首字母 */
       const avatarHtml = avatar
         ? `<img class="thanks-card__avatar thanks-card__avatar--img"
                 src="assets/avatars/${sanitize(avatar)}.jpg"
                 alt="${nameSafe}"
                 loading="lazy"
-                onerror="this.outerHTML='<span class=&quot;thanks-card__avatar&quot;>${initial}</span>'">`
+                onerror="this.outerHTML='&lt;span class=&quot;thanks-card__avatar&quot;&gt;${initial}&lt;/span&gt;'">`
         : `<span class="thanks-card__avatar">${initial}</span>`;
 
       return `
