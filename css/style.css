@@ -596,3 +596,41 @@ main{flex:1;position:relative;z-index:1}
   border-color:rgba(255,110,130,.28);
   color:var(--red-lt);
 }
+/* ============================================================
+   特别鸣谢 · 头像
+============================================================ */
+.thanks-card__avatar--img{
+  object-fit: cover;
+  object-position: center;
+  padding: 0;
+  background: rgba(255,255,255,.04);
+  border: 1.5px solid var(--line-strong);
+  box-shadow:
+    0 6px 14px -8px rgba(212,180,122,.9),
+    inset 0 1px 0 rgba(255,255,255,.1);
+  overflow: hidden;
+}
+
+/* 悬停时轻微放大 */
+.thanks-card__member:hover .thanks-card__avatar--img{
+  transform: scale(1.06);
+  border-color: var(--gold);
+  box-shadow:
+    0 8px 20px -8px rgba(212,180,122,1),
+    inset 0 1px 0 rgba(255,255,255,.15);
+  transition: .25s cubic-bezier(.2,.9,.3,1);
+}
+
+/* 合作分类的头像用青色边框 */
+.thanks-card[data-category="合作"] .thanks-card__avatar--img{
+  border-color: rgba(120,220,200,.5);
+  box-shadow:
+    0 6px 14px -8px rgba(120,220,200,.9),
+    inset 0 1px 0 rgba(255,255,255,.1);
+}
+.thanks-card[data-category="合作"] .thanks-card__member:hover .thanks-card__avatar--img{
+  border-color: var(--cyan);
+  box-shadow:
+    0 8px 20px -8px rgba(120,220,200,1),
+    inset 0 1px 0 rgba(255,255,255,.15);
+}
