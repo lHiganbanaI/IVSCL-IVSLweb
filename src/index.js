@@ -52,7 +52,9 @@ export default {
         ).bind(inviteCode.trim().toUpperCase()).first();
 
         if (!code) return json({ error: '激活码无效' }, corsHeaders, 400);
-        if (code.used) return json({ error: '激活码已被使用' }, corsHeaders, 400);
+        
+        // 【修改点1】注释掉已被使用的检查
+        // if (code.used) return json({ error: '激活码已被使用' }, corsHeaders, 400);
 
         const exists = await env.DB.prepare(
           'SELECT id FROM users WHERE phone = ?'
@@ -70,9 +72,10 @@ export default {
           'INSERT INTO users (phone, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)'
         ).bind(phone, username, hash, code.role, now).run();
 
-        await env.DB.prepare(
-          'UPDATE invite_codes SET used = 1, used_by = ? WHERE code = ?'
-        ).bind(phone, code.code).run();
+        // 【修改点2】注释掉更新激活码状态的语句
+        // await env.DB.prepare(
+        //   'UPDATE invite_codes SET used = 1, used_by = ? WHERE code = ?'
+        // ).bind(phone, code.code).run();
 
         const user = { phone, username, role: code.role };
         const token = await signToken(user, env);
