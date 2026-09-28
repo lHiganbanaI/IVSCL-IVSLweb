@@ -1,7 +1,7 @@
 {
   "codes": [
     { "code": "ADMIN-2026", "role": "admin",  "label": "管理员" },
-    { "code": "zycnb6666", "role": "admin",  "label": "管理员" },
+    { "code": "zycnb666", "role": "admin",  "label": "管理员" },
     { "code": "imcanxiang", "role": "admin",  "label": "管理员" },
     { "code": "imlaobo", "role": "admin",  "label": "管理员" },
     { "code": "TEAM-2026",  "role": "team",   "label": "参赛队伍" },
