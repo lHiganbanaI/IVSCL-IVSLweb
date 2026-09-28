@@ -2,7 +2,7 @@
    全局配置
 ============================================================ */
 
-export const API_BASE = 'https://ivscl-api.ivscl-api.workers.dev';
+export const API_BASE = 'https://api.ivscl-ivsl.cn';
 
 export const TOKEN_KEY = 'ivscl_token';
 
