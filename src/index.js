@@ -3,11 +3,9 @@
    Cloudflare Workers + D1 (激活码读取本地文件版)
 ============================================================ */
 
-// 【修改点1】导入本地 JSON 文件
-// 请确保你的 invite-codes.json 文件在项目中的相对路径正确
-// 假设 index.js 在 src/ 目录，而 invite-codes.json 在项目根目录，则用 '../'
-// 如果它们在同一目录，则用 './'
-import inviteCodes from '../invite-codes.json';
+// 【修改点1】导入本地 JSON 文件（请根据 index.js 实际位置调整路径）
+// 如果你的 index.js 在 src 目录，JSON 在 data 目录，则用 '../data/'
+import inviteCodesData from '../data/invite-codes.json';
 
 export default {
   async fetch(request, env) {
@@ -53,14 +51,13 @@ export default {
           return json({ error: '请输入激活码' }, corsHeaders, 400);
         }
 
-        // 【修改点2】从本地 JSON 数组中查找激活码，替代原来的 D1 查询
+        // 【修改点2】从本地 JSON 的 codes 数组中查找激活码
         const inputCode = inviteCode.trim().toUpperCase();
-        const code = inviteCodes.find(c => c.code === inputCode);
+        const code = inviteCodesData.codes.find(c => c.code.toUpperCase() === inputCode);
 
         if (!code) return json({ error: '激活码无效' }, corsHeaders, 400);
         
         // 本地文件天然支持无限次使用，无需检查 used 状态
-        // if (code.used) return json({ error: '激活码已被使用' }, corsHeaders, 400);
 
         const exists = await env.DB.prepare(
           'SELECT id FROM users WHERE phone = ?'
@@ -75,7 +72,7 @@ export default {
         const hash = await sha256(password);
         const now = new Date().toISOString();
         
-        // 注意：这里的 code.role 依然生效，因为你在 JSON 文件里配置了 role
+        // 注意：这里的 code.role 依然生效，对应你 JSON 里的 role 字段
         await env.DB.prepare(
           'INSERT INTO users (phone, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)'
         ).bind(phone, username, hash, code.role, now).run();
