@@ -177,6 +177,10 @@ async function openToolModal(toolId) {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadRoomsTool(box);
+  } else if (toolId === 'schedule') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadScheduleTool(box);
   }
 }
 
@@ -755,6 +759,196 @@ function renderRoomListBox(list) {
       }
     });
   });
+}
+
+/* ============================================================
+   添加赛程（上传 JSON 对阵表）
+============================================================ */
+async function loadScheduleTool(box) {
+  let published = null;
+  try {
+    const data = await apiRequest('/api/schedule');
+    published = data.schedule || null;
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+    return;
+  }
+
+  box.innerHTML = `
+    <h3 class="tool-modal__title">添加赛程 <em>ADMIN</em></h3>
+    <p class="tool-modal__sub">上传包含对阵的 JSON 文件，64 进 32 淘汰赛将立即发布到「赛事流程」页。每场对阵为两个队伍简称。</p>
+
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>上传对阵表</h4></div>
+      <div class="tool-form">
+        <div class="tool-field">
+          <label for="scheduleTitle">赛程标题</label>
+          <input type="text" id="scheduleTitle" placeholder="例如：64 进 32 淘汰赛" maxlength="30" value="64 进 32 淘汰赛">
+        </div>
+        <div class="tool-field">
+          <label for="scheduleFile">JSON 文件（队伍简称对阵）</label>
+          <input type="file" id="scheduleFile" accept=".json,application/json">
+        </div>
+        <p class="schedule-format-hint">
+          <b>JSON 格式示例：</b>
+          <code>{ "title":"64 进 32 淘汰赛", "matches":[ { "a":"hlkz", "b":"jczx" }, { "a":"hx", "b":"rest1" } ] }</code>
+          也支持 <code>{ "matches":[ ["hlkz","jczx"], ... ] }</code> 或扁平数组 <code>["hlkz","jczx", ...]</code>（两两一组）。队伍 Logo 自动按简称匹配。
+        </p>
+      </div>
+      <div class="tool-actions">
+        <button class="btn btn--primary btn--sm" id="schedulePublishBtn" type="button">📤 发布赛程</button>
+        <button class="btn btn--ghost btn--sm" id="scheduleClearBtn" type="button">清空赛程</button>
+      </div>
+      <p class="draw-info" id="scheduleMsg">未选择文件</p>
+    </section>
+
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head">
+        <h4>已发布赛程</h4>
+        <span class="tool-modal__count" id="scheduleCount">${published && published.matches ? published.matches.length : 0} 场</span>
+      </div>
+      <div class="schedule-list" id="scheduleList"></div>
+    </section>
+  `;
+
+  renderScheduleListBox(published);
+
+  const fileInput = document.getElementById('scheduleFile');
+  const msg = document.getElementById('scheduleMsg');
+  let parsedFile = null;
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) { parsedFile = null; msg.textContent = '未选择文件'; return; }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        parsedFile = parseScheduleJson(e.target.result);
+        msg.textContent = `已解析：${parsedFile.matches.length} 场对阵，标题「${parsedFile.title}」。点击「发布赛程」即可生效。`;
+      } catch (err) {
+        parsedFile = null;
+        msg.textContent = '解析失败：' + err.message;
+      }
+    };
+    reader.onerror = () => { parsedFile = null; msg.textContent = '文件读取失败'; };
+    reader.readAsText(file, 'utf-8');
+  });
+
+  document.getElementById('schedulePublishBtn').addEventListener('click', async () => {
+    if (!parsedFile) { alert('请先选择并解析有效的 JSON 文件'); return; }
+    const btn = document.getElementById('schedulePublishBtn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '发布中…';
+    try {
+      const title = (document.getElementById('scheduleTitle').value || '').trim() || parsedFile.title;
+      await apiRequest('/api/schedule', {
+        method: 'POST',
+        body: JSON.stringify({ title, matches: parsedFile.matches })
+      });
+      msg.textContent = '✅ 发布成功，赛事流程页已更新。';
+      const data = await apiRequest('/api/schedule');
+      renderScheduleListBox(data.schedule);
+      document.getElementById('scheduleCount').textContent = data.schedule.matches.length + ' 场';
+      if (window.app?.loadSchedule) window.app.loadSchedule();
+    } catch (err) {
+      alert('发布失败：' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  });
+
+  document.getElementById('scheduleClearBtn').addEventListener('click', async () => {
+    if (!confirm('确定要清空当前赛程吗？赛事流程页将显示「赛程尚未发布」。')) return;
+    try {
+      await apiRequest('/api/schedule', { method: 'DELETE' });
+      renderScheduleListBox(null);
+      document.getElementById('scheduleCount').textContent = '0 场';
+      document.getElementById('scheduleMsg').textContent = '已清空赛程。';
+      if (window.app?.loadSchedule) window.app.loadSchedule();
+    } catch (err) {
+      alert('清空失败：' + err.message);
+    }
+  });
+}
+
+/* 解析上传的赛程 JSON，兼容多种格式 */
+function parseScheduleJson(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('不是合法的 JSON 文本');
+  }
+
+  let title = '';
+  let raw = null;
+
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (data && typeof data === 'object') {
+    title = String(data.title || data.round || '').trim();
+    if (Array.isArray(data.matches)) raw = data.matches;
+    else if (Array.isArray(data.groups)) raw = data.groups;
+    else if (Array.isArray(data.pairs)) raw = data.pairs;
+  }
+
+  if (!Array.isArray(raw)) throw new Error('JSON 中找不到对阵数组（matches / groups / pairs）');
+
+  const matches = [];
+  raw.forEach(m => {
+    if (Array.isArray(m)) {
+      matches.push({ a: String(m[0] || '').trim(), b: String(m[1] || '').trim() });
+    } else if (typeof m === 'string') {
+      matches.push({ a: m.trim(), b: '' }); // 扁平数组，后续两两合并
+    } else if (m && typeof m === 'object') {
+      matches.push({
+        a: String(m.a ?? m.home ?? m.t1 ?? m.team1 ?? '').trim(),
+        b: String(m.b ?? m.away ?? m.t2 ?? m.team2 ?? '').trim()
+      });
+    }
+  });
+
+  // 扁平字符串数组：两两一组
+  if (matches.some(p => !p.b)) {
+    const flat = matches.map(p => p.a);
+    const paired = [];
+    for (let i = 0; i < flat.length; i += 2) {
+      paired.push({ a: flat[i] || '', b: flat[i + 1] || '' });
+    }
+    matches.length = 0;
+    matches.push(...paired);
+  }
+
+  const cleaned = matches.filter(p => p.a || p.b);
+  if (!cleaned.length) throw new Error('没有解析到任何对阵');
+
+  return { title: title || '64 进 32 淘汰赛', matches: cleaned };
+}
+
+function renderScheduleListBox(schedule) {
+  const box = document.getElementById('scheduleList');
+  if (!box) return;
+  const list = schedule && schedule.matches ? schedule.matches : [];
+  if (!list.length) {
+    box.innerHTML = '<div class="tool-list__empty">尚未发布赛程</div>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="schedule-list__head">${sanitize(schedule.title || '64 进 32 淘汰赛')}</div>
+    <div class="schedule-list__grid">
+      ${list.map((p, i) => `
+        <div class="schedule-list__pair">
+          <span class="schedule-list__no">${String(i + 1).padStart(2, '0')}</span>
+          <span class="schedule-list__team">${sanitize(p.a || '轮空')}</span>
+          <span class="schedule-list__vs">VS</span>
+          <span class="schedule-list__team">${sanitize(p.b || '轮空')}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 /* ============================================================

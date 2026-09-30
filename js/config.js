@@ -119,6 +119,14 @@ export const TOOLS_DEF = [
     title: '赛事抽签',
     desc: '为当前参赛队伍随机生成对阵表',
     roles: ['admin']
+  },
+  {
+    id: 'schedule',
+    section: 'admin',
+    icon: '🗓️',
+    title: '添加赛程',
+    desc: '上传 JSON 对阵表，64 进 32 淘汰赛立即发布到赛事流程页',
+    roles: ['admin']
   }
 ];
 

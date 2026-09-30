@@ -302,6 +302,79 @@ export async function loadThanks() {
 }
 
 /* ============================================================
+   赛事赛程（64 进 32 对阵表）
+============================================================ */
+function teamLogoSrc(short, logoMap) {
+  /* 优先用后端队伍表里的 logo，其次静态路径，最后 SVG 占位 */
+  if (logoMap && logoMap[short]) return logoMap[short];
+  return `${TEAM_LOGO_DIR}loge_${sanitize(short || '')}${TEAM_LOGO_EXT}`;
+}
+
+function scheduleSideHtml(short, logoMap) {
+  const name = sanitize(short || '轮空');
+  const src = teamLogoSrc(short, logoMap);
+  return `
+    <div class="schedule-card__side">
+      <img class="schedule-card__logo" src="${src}" alt="${name} logo" loading="lazy"
+        onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23182242%22 stroke=%22%23d4b47a%22 stroke-width=%222%22 stroke-dasharray=%226 6%22/><text x=%2250%22 y=%2264%22 font-size=%2240%22 font-weight=%22900%22 fill=%22%23d4b47a%22 text-anchor=%22middle%22 font-family=%22sans-serif%22>?</text></svg>'">
+      <span class="schedule-card__name">${name}</span>
+    </div>
+  `;
+}
+
+export function renderSchedule(list, container, title, logoMap) {
+  if (!list || !list.length) {
+    container.innerHTML = '<div class="board__state">赛程尚未发布</div>';
+    container.setAttribute('aria-busy', 'false');
+    return;
+  }
+  const cards = list.map((p, i) => `
+    <div class="schedule-card">
+      <div class="schedule-card__no">${String(i + 1).padStart(2, '0')}</div>
+      ${scheduleSideHtml(p.a, logoMap)}
+      <div class="schedule-card__vs">VS</div>
+      ${scheduleSideHtml(p.b, logoMap)}
+    </div>
+  `).join('');
+  container.innerHTML = `
+    <div class="schedule-board__head">
+      <h3>${sanitize(title || '64 进 32 淘汰赛')}</h3>
+      <span class="schedule-board__count">${list.length} 场对阵</span>
+    </div>
+    <div class="schedule-grid">${cards}</div>
+  `;
+  container.setAttribute('aria-busy', 'false');
+}
+
+export async function loadSchedule() {
+  const box = document.getElementById('scheduleBoard');
+  if (!box) return;
+
+  /* 拉取队伍表，建立 short -> logo 映射 */
+  let logoMap = {};
+  try {
+    const t = await apiRequest('/api/teams');
+    (t.teams || []).forEach(team => {
+      if (team.short && team.logo) logoMap[team.short] = team.logo;
+    });
+  } catch (e) {}
+
+  try {
+    const data = await apiRequest('/api/schedule');
+    const s = data.schedule;
+    if (!s || !s.matches || !s.matches.length) {
+      renderSchedule([], box, '', logoMap);
+      return;
+    }
+    renderSchedule(s.matches, box, s.title, logoMap);
+  } catch (err) {
+    console.warn('[赛事流程] 加载失败：', err.message);
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+  }
+  box.setAttribute('aria-busy', 'false');
+}
+
+/* ============================================================
    初始化所有内容
 ============================================================ */
 export function initContent() {
@@ -310,4 +383,5 @@ export function initContent() {
   loadHistory();
   loadThanks();
   loadTeams();
+  loadSchedule();
 } 

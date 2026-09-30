@@ -322,6 +322,64 @@ export default {
         }
       }
 
+      /* ============================================================
+         赛事赛程（64 进 32 对阵表）
+      ============================================================ */
+
+      if (path === '/api/schedule') {
+        if (method === 'GET') {
+          const result = await env.DB.prepare(
+            'SELECT * FROM schedule ORDER BY id DESC LIMIT 1'
+          ).first();
+          if (!result) return json({ schedule: null }, corsHeaders);
+
+          let matches = [];
+          try { matches = JSON.parse(result.matches); } catch (e) {}
+
+          return json({ schedule: { id: result.id, title: result.title || '', matches, created_at: result.created_at } }, corsHeaders);
+        }
+
+        if (method === 'POST') {
+          const user = await verifyToken(request, env);
+          if (!user || user.role !== 'admin') {
+            return json({ error: '无权访问' }, corsHeaders, 403);
+          }
+
+          const { title, matches } = await request.json();
+          if (!Array.isArray(matches) || !matches.length) {
+            return json({ error: '对阵数据不能为空' }, corsHeaders, 400);
+          }
+
+          // 规范化：每场对阵必须是 { a, b } 两个队伍简称
+          const pairs = matches.map(m => {
+            if (Array.isArray(m)) return { a: String(m[0] || '').trim(), b: String(m[1] || '').trim() };
+            return {
+              a: String(m.a ?? m.home ?? m.t1 ?? '').trim(),
+              b: String(m.b ?? m.away ?? m.t2 ?? '').trim()
+            };
+          });
+
+          if (pairs.some(p => !p.a)) {
+            return json({ error: '存在空队伍简称，请检查 JSON 格式' }, corsHeaders, 400);
+          }
+
+          const info = await env.DB.prepare(
+            'INSERT INTO schedule (title, matches, created_at) VALUES (?, ?, ?)'
+          ).bind(title || '64 进 32 淘汰赛', JSON.stringify(pairs), new Date().toISOString()).run();
+
+          return json({ id: info.meta.last_row_id, title: title || '64 进 32 淘汰赛', pairs, created_at: new Date().toISOString() }, corsHeaders);
+        }
+
+        if (method === 'DELETE') {
+          const user = await verifyToken(request, env);
+          if (!user || user.role !== 'admin') {
+            return json({ error: '无权访问' }, corsHeaders, 403);
+          }
+          await env.DB.prepare('DELETE FROM schedule').run();
+          return json({ ok: true }, corsHeaders);
+        }
+      }
+
       return json({ error: 'Not Found: ' + path }, corsHeaders, 404);
 
     } catch (err) {

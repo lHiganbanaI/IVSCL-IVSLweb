@@ -3,7 +3,7 @@
 ============================================================ */
 
 import { initUI, setTabChangeCallback } from './ui.js';
-import { initContent, loadAnnouncements, loadTeams } from './content.js';
+import { initContent, loadAnnouncements, loadTeams, loadSchedule } from './content.js';
 import { initAuth, setAuthChangeCallback } from './auth.js';
 import { initTools, renderToolsPanel } from './tools.js';
 
@@ -11,6 +11,7 @@ import { initTools, renderToolsPanel } from './tools.js';
 window.app = {
   loadAnnouncements,
   loadTeams,
+  loadSchedule,
   renderToolsPanel
 };
 
@@ -18,6 +19,7 @@ window.app = {
 setTabChangeCallback((name) => {
   if (name === 'tools') renderToolsPanel();
   if (name === 'teams') loadTeams();
+  if (name === 'schedule') loadSchedule();
 });
 
 /* 登录状态变化时刷新工具面板 */
