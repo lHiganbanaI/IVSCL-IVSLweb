@@ -14,7 +14,7 @@ export const HISTORY_LOGO_EXT = '.jpg';
 
 export const ROLE_LABELS = {
   admin: '管理员',
-  team:  '参赛队伍',
+  team:  '队伍队长',
   judge: '裁判',
   staff: '工作人员',
   press: '媒体',
@@ -127,6 +127,22 @@ export const TOOLS_DEF = [
     title: '添加赛程',
     desc: '上传 JSON 对阵表，64 进 32 淘汰赛立即发布到赛事流程页',
     roles: ['admin']
+  },
+  {
+    id: 'bindSchool',
+    section: 'team',
+    icon: '🏫',
+    title: '绑定学校',
+    desc: '绑定你的队伍学校（队长，从学校列表选择）',
+    roles: ['team']
+  },
+  {
+    id: 'teamPlayers',
+    section: 'team',
+    icon: '👥',
+    title: '提交选手名单',
+    desc: '提交求生/监管/双边选手与教练名单（教练无需 uid）',
+    roles: ['team', 'admin']
   }
 ];
 
@@ -135,8 +151,9 @@ export const SECTION_LABELS = {
   public:      { title: '公共工具', sub: 'PUBLIC' },
   referee:     { title: '裁判工具', sub: 'REFEREE' },
   commentator: { title: '解说工具', sub: 'COMMENTATOR' },
+  team:        { title: '队伍工具', sub: 'TEAM' },
   admin:       { title: '管理员工具', sub: 'ADMIN' }
 };
 
 /* 分区显示顺序 */
-export const SECTION_ORDER = ['public', 'referee', 'commentator', 'admin'];
+export const SECTION_ORDER = ['public', 'referee', 'commentator', 'team', 'admin'];

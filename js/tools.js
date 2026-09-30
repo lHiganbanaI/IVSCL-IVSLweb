@@ -181,6 +181,14 @@ async function openToolModal(toolId) {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadScheduleTool(box);
+  } else if (toolId === 'bindSchool') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadBindSchoolTool(box);
+  } else if (toolId === 'teamPlayers') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadTeamPlayersTool(box);
   }
 }
 
@@ -948,6 +956,275 @@ function renderScheduleListBox(schedule) {
         </div>
       `).join('')}
     </div>
+  `;
+}
+
+/* ============================================================
+   绑定学校（队伍队长）
+============================================================ */
+async function loadBindSchoolTool(box) {
+  const u = getCurrentUser();
+  const isAdmin = u && u.role === 'admin';
+
+  /* 拉取学校列表 + 当前绑定 */
+  let schools = [];
+  let current = null;
+  try {
+    const [t, p] = await Promise.all([
+      apiRequest('/api/teams').catch(() => ({ teams: [] })),
+      apiRequest('/api/team/school').catch(() => ({}))
+    ]);
+    schools = (t.teams || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    current = p.profile || null;
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+    return;
+  }
+
+  const optHtml = schools.map(s =>
+    `<option value="${sanitize(s.short)}" ${current && current.school === s.short ? 'selected' : ''}>${sanitize(s.name)}（${sanitize(s.short)}）</option>`
+  ).join('');
+
+  box.innerHTML = `
+    <h3 class="tool-modal__title">绑定学校 <em>TEAM</em></h3>
+    <p class="tool-modal__sub">选择你的队伍学校并绑定。绑定后才能提交选手名单。</p>
+    ${current ? `<div class="tool-modal__info">当前已绑定：<b>${sanitize(current.school)}</b></div>` : ''}
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>选择学校</h4></div>
+      <div class="tool-form">
+        <div class="tool-field">
+          <label for="bindSchoolSelect">学校</label>
+          <select id="bindSchoolSelect">${optHtml}</select>
+        </div>
+      </div>
+      <div class="tool-actions">
+        <button class="btn btn--primary btn--sm" id="bindSchoolBtn" type="button">${current ? '更新绑定' : '绑定学校'}</button>
+      </div>
+      <p class="draw-info" id="bindSchoolMsg"></p>
+    </section>
+  `;
+
+  document.getElementById('bindSchoolBtn').addEventListener('click', async () => {
+    const school = document.getElementById('bindSchoolSelect').value;
+    if (!school) { alert('请先选择学校'); return; }
+    const btn = document.getElementById('bindSchoolBtn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '绑定中…';
+    try {
+      await apiRequest('/api/team/school', { method: 'POST', body: JSON.stringify({ school }) });
+      const msg = document.getElementById('bindSchoolMsg');
+      msg.innerHTML = '✅ 已绑定学校：<b>' + sanitize(school) + '</b>，现在可以去「提交选手名单」。';
+    } catch (err) {
+      alert('绑定失败：' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+}
+
+/* ============================================================
+   提交选手名单（队伍队长 / 管理员查看）
+============================================================ */
+const PLAYER_POSITIONS = ['求生', '监管', '双边'];
+
+async function loadTeamPlayersTool(box) {
+  const u = getCurrentUser();
+  const isAdmin = u && u.role === 'admin';
+  let currentSchool = null;
+
+  try {
+    const p = await apiRequest('/api/team/school').catch(() => ({}));
+    currentSchool = (p.profile && p.profile.school) || null;
+  } catch (e) {}
+
+  /* 管理员：拉取学校列表用于查看任意学校 */
+  let schools = [];
+  if (isAdmin) {
+    try { schools = (await apiRequest('/api/teams')).teams || []; } catch (e) {}
+  }
+
+  const posOpts = PLAYER_POSITIONS.map(v => `<option value="${v}">${v}</option>`).join('');
+
+  box.innerHTML = `
+    <h3 class="tool-modal__title">选手名单 <em>TEAM</em></h3>
+    <p class="tool-modal__sub">${isAdmin ? '管理员可查看各学校已提交的名单。' : '提交你的队伍选手：选手填 uid+名字+位置（求生/监管/双边），教练只需名字。'}</p>
+
+    ${isAdmin ? `
+      <section class="tool-modal__section">
+        <div class="tool-modal__section-head"><h4>查看某学校名单</h4></div>
+        <div class="tool-form">
+          <div class="tool-field">
+            <label for="adminViewSchool">选择学校</label>
+            <select id="adminViewSchool">
+              <option value="">-- 全部学校 --</option>
+              ${schools.map(s => `<option value="${sanitize(s.short)}">${sanitize(s.name)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </section>
+    ` : (currentSchool ? `<div class="tool-modal__info">当前学校：<b>${sanitize(currentSchool)}</b></div>` : '<div class="tool-modal__info" style="color:#ffb3c0">⚠ 尚未绑定学校，请先在「绑定学校」中绑定。</div>')}
+
+    ${!isAdmin && !currentSchool ? '' : `
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head">
+        <h4>${isAdmin ? '名单列表' : '提交名单'}</h4>
+        ${isAdmin ? '' : '<span class="tool-modal__count">可多行添加选手</span>'}
+      </div>
+      <div id="playersEditArea"></div>
+    </section>
+    `}
+  `;
+
+  if (isAdmin) {
+    const viewSel = document.getElementById('adminViewSchool');
+    const area = document.getElementById('playersEditArea');
+    const loadList = async () => {
+      const school = viewSel.value;
+      try {
+        const q = school ? '?school=' + encodeURIComponent(school) : '';
+        const data = await apiRequest('/api/team/players' + q);
+        area.innerHTML = renderPlayersList(data.players || [], data.school || null);
+      } catch (err) {
+        area.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+      }
+    };
+    viewSel.addEventListener('change', loadList);
+    loadList();
+    return;
+  }
+
+  /* 队长：提交表单 */
+  const area = document.getElementById('playersEditArea');
+  const getRows = () => area.querySelectorAll('.player-row');
+  const renderEdit = (rows) => {
+    const list = rows.map((r, i) => `
+      <div class="player-row" data-i="${i}">
+        <div class="player-row__head">
+          <span class="player-row__label">选手 ${i + 1}</span>
+          <button type="button" class="player-row__del" data-del="${i}" aria-label="删除">✕</button>
+        </div>
+        <div class="tool-form__row">
+          <div class="tool-field"><label>名字</label><input type="text" class="pp-name" maxlength="20" value="${sanitize(r.name || '')}"></div>
+          <div class="tool-field"><label>UID</label><input type="text" class="pp-uid" maxlength="20" value="${sanitize(r.uid || '')}"></div>
+          <div class="tool-field"><label>位置</label><select class="pp-pos">${posOpts}</select></div>
+        </div>
+      </div>
+    `).join('');
+    const coachHtml = `
+      <div class="player-row player-row--coach">
+        <div class="player-row__head">
+          <span class="player-row__label">教练（无需 UID）</span>
+        </div>
+        <div class="tool-form__row">
+          <div class="tool-field"><label>教练名字</label><input type="text" id="coachName" maxlength="20" value="${sanitize(rows.length ? '' : '')}"></div>
+        </div>
+      </div>`;
+    area.innerHTML = list + coachHtml;
+    /* 回填位置选中 */
+    area.querySelectorAll('.pp-pos').forEach((sel, i) => { if (rows[i]) sel.value = rows[i].position || '求生'; });
+    /* 教练回填 */
+    const coachEl = document.getElementById('coachName');
+    /* 行删除 */
+    area.querySelectorAll('.player-row__del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.del);
+        const cur = collectRows();
+        cur.splice(idx, 1);
+        renderEdit(cur);
+      });
+    });
+  };
+  const collectRows = () => {
+    return Array.from(getRows()).map(row => ({
+      name: (row.querySelector('.pp-name')?.value || '').trim(),
+      uid: (row.querySelector('.pp-uid')?.value || '').trim(),
+      position: row.querySelector('.pp-pos')?.value || '求生'
+    }));
+  };
+
+  /* 默认：4 求生 + 1 监管 */
+  const defaultRows = () => [
+    { name:'', uid:'', position:'求生' }, { name:'', uid:'', position:'求生' },
+    { name:'', uid:'', position:'求生' }, { name:'', uid:'', position:'求生' },
+    { name:'', uid:'', position:'监管' }
+  ];
+  /* 初始：加载当前已提交名单填充；无则用默认行 */
+  if (currentSchool) {
+    try {
+      const d = await apiRequest('/api/team/players');
+      const list = (d.players || []).filter(x => !x.is_coach).map(x => ({ name: x.name, uid: x.uid || '', position: x.position || '求生' }));
+      const coach = (d.players || []).find(x => x.is_coach);
+      area.innerHTML = '';
+      renderEdit(list.length ? list : defaultRows());
+      if (coach) document.getElementById('coachName').value = coach.name || '';
+    } catch (e) { renderEdit(defaultRows()); }
+  } else {
+    renderEdit(defaultRows());
+  }
+
+  area.insertAdjacentHTML('afterend', `
+    <div class="tool-actions">
+      <button class="btn btn--ghost btn--sm" id="addPlayerBtn" type="button">+ 添加选手</button>
+      <button class="btn btn--primary btn--sm" id="savePlayersBtn" type="button">💾 提交名单</button>
+    </div>
+    <p class="draw-info" id="playersMsg"></p>
+  `);
+
+  document.getElementById('addPlayerBtn').addEventListener('click', () => {
+    const cur = collectRows();
+    cur.push({ name: '', uid: '', position: '求生' });
+    renderEdit(cur);
+  });
+
+  document.getElementById('savePlayersBtn').addEventListener('click', async () => {
+    const rows = collectRows().filter(r => r.name || r.uid);
+    const coachName = (document.getElementById('coachName')?.value || '').trim();
+    if (!rows.length && !coachName) { alert('请至少添加一名选手或教练'); return; }
+    for (const r of rows) {
+      if (!r.name) { alert('选手名字不能为空'); return; }
+      if (!r.uid) { alert('选手 UID 不能为空'); return; }
+    }
+    const btn = document.getElementById('savePlayersBtn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '提交中…';
+    try {
+      const data = await apiRequest('/api/team/players', {
+        method: 'POST',
+        body: JSON.stringify({ players: rows, coach: coachName ? { name: coachName } : null })
+      });
+      const msg = document.getElementById('playersMsg');
+      msg.innerHTML = '✅ 已提交：选手 ' + data.players + ' 人' + (data.coach ? '，教练 ' + sanitize(data.coach) : '') + '。';
+    } catch (err) {
+      alert('提交失败：' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+}
+
+function renderPlayersList(list, school) {
+  if (!list || !list.length) {
+    return '<div class="tool-list__empty">' + (school ? '该校尚未提交名单' : '尚未有任何队伍提交名单') + '</div>';
+  }
+  const players = list.filter(x => !x.is_coach);
+  const coach = list.find(x => x.is_coach);
+  return `
+    <div class="tool-modal__info">${school ? '学校：<b>' + sanitize(school) + '</b>' : '全部学校'} · 选手 ${players.length} 人</div>
+    <ul class="tool-list" style="list-style:none;padding:0">
+      ${players.map(p => `
+        <li class="tool-list__item">
+          <div class="tool-list__body">
+            <div class="tool-list__title">${sanitize(p.name)} <span class="msg__tag">${sanitize(p.position || '')}</span></div>
+            <div class="tool-list__meta"><span>UID ${sanitize(p.uid || '—')}</span>${school ? '' : '<span>🏫 ' + sanitize(p.school) + '</span>'}</div>
+          </div>
+        </li>
+      `).join('')}
+      ${coach ? `<li class="tool-list__item"><div class="tool-list__body"><div class="tool-list__title">🧑‍🏫 教练：${sanitize(coach.name)}</div></div></li>` : ''}
+    </ul>
   `;
 }
 

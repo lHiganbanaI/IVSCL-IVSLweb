@@ -310,8 +310,9 @@ function teamLogoSrc(short, logoMap) {
   return `${TEAM_LOGO_DIR}loge_${sanitize(short || '')}${TEAM_LOGO_EXT}`;
 }
 
-function scheduleSideHtml(short, logoMap) {
-  const name = sanitize(short || '轮空');
+function scheduleSideHtml(short, logoMap, nameMap) {
+  const shortSafe = sanitize(short || '轮空');
+  const name = sanitize(nameMap && nameMap[short] ? nameMap[short] : (short || '轮空'));
   const src = teamLogoSrc(short, logoMap);
   return `
     <div class="schedule-card__side">
@@ -322,18 +323,17 @@ function scheduleSideHtml(short, logoMap) {
   `;
 }
 
-export function renderSchedule(list, container, title, logoMap) {
+export function renderSchedule(list, container, title, logoMap, nameMap) {
   if (!list || !list.length) {
     container.innerHTML = '<div class="board__state">赛程尚未发布</div>';
     container.setAttribute('aria-busy', 'false');
     return;
   }
-  const cards = list.map((p, i) => `
+  const cards = list.map(p => `
     <div class="schedule-card">
-      <div class="schedule-card__no">${String(i + 1).padStart(2, '0')}</div>
-      ${scheduleSideHtml(p.a, logoMap)}
+      ${scheduleSideHtml(p.a, logoMap, nameMap)}
       <div class="schedule-card__vs">VS</div>
-      ${scheduleSideHtml(p.b, logoMap)}
+      ${scheduleSideHtml(p.b, logoMap, nameMap)}
     </div>
   `).join('');
   container.innerHTML = `
@@ -350,12 +350,14 @@ export async function loadSchedule() {
   const box = document.getElementById('scheduleBoard');
   if (!box) return;
 
-  /* 拉取队伍表，建立 short -> logo 映射 */
-  let logoMap = {};
+  /* 拉取队伍表，建立 short -> logo 映射 与 short -> 全名 映射 */
+  let logoMap = {}, nameMap = {};
   try {
     const t = await apiRequest('/api/teams');
     (t.teams || []).forEach(team => {
-      if (team.short && team.logo) logoMap[team.short] = team.logo;
+      if (!team.short) return;
+      if (team.logo) logoMap[team.short] = team.logo;
+      nameMap[team.short] = team.name || team.short;
     });
   } catch (e) {}
 
@@ -363,10 +365,10 @@ export async function loadSchedule() {
     const data = await apiRequest('/api/schedule');
     const s = data.schedule;
     if (!s || !s.matches || !s.matches.length) {
-      renderSchedule([], box, '', logoMap);
+      renderSchedule([], box, '', logoMap, nameMap);
       return;
     }
-    renderSchedule(s.matches, box, s.title, logoMap);
+    renderSchedule(s.matches, box, s.title, logoMap, nameMap);
   } catch (err) {
     console.warn('[赛事流程] 加载失败：', err.message);
     box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
