@@ -219,6 +219,12 @@ export default {
           return json({ error: '无权访问' }, corsHeaders, 403);
         }
         const id = path.split('/').pop();
+        const t = await env.DB.prepare('SELECT short FROM teams WHERE id = ?').bind(id).first();
+        if (t) {
+          /* 级联清理该学校已提交的选手名单与队长绑定 */
+          await env.DB.prepare('DELETE FROM players WHERE school = ?').bind(t.short).run();
+          await env.DB.prepare('DELETE FROM team_profiles WHERE school = ?').bind(t.short).run();
+        }
         await env.DB.prepare('DELETE FROM teams WHERE id = ?').bind(id).run();
         return json({ ok: true }, corsHeaders);
       }
@@ -245,17 +251,31 @@ export default {
             return json({ error: '无权访问' }, corsHeaders, 403);
           }
 
-          const { code, password, title } = await request.json();
+          const { code, password, title, start_time, team_a, team_b, home } = await request.json();
           if (!code) return json({ error: '房间号不能为空' }, corsHeaders, 400);
 
+          /* 对战双方队伍必须真实存在 */
+          let teamA = null, teamB = null;
+          if (team_a && team_b) {
+            const rowA = await env.DB.prepare('SELECT short FROM teams WHERE short = ?').bind(team_a).first();
+            const rowB = await env.DB.prepare('SELECT short FROM teams WHERE short = ?').bind(team_b).first();
+            if (!rowA || !rowB) return json({ error: '对战队伍不存在，请选择已登记的学校' }, corsHeaders, 400);
+            if (team_a === team_b) return json({ error: '对战双方不能是同一支队伍' }, corsHeaders, 400);
+            teamA = team_a; teamB = team_b;
+          }
+
           const info = await env.DB.prepare(
-            'INSERT INTO rooms (code, password, title, creator, created_at) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO rooms (code, password, title, creator, created_at, start_time, team_a, team_b, home) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
           ).bind(
             code,
             password || '',
             title || '',
             user.username || '匿名',
-            new Date().toISOString()
+            new Date().toISOString(),
+            start_time || '',
+            teamA,
+            teamB,
+            home || ''
           ).run();
 
           return json({ id: info.meta.last_row_id }, corsHeaders);
@@ -378,6 +398,190 @@ export default {
           await env.DB.prepare('DELETE FROM schedule').run();
           return json({ ok: true }, corsHeaders);
         }
+      }
+
+      /* ============================================================
+         队伍队长：绑定学校 + 提交选手名单
+      ============================================================ */
+
+      // 队长绑定学校（写入 team_profiles）
+      if (path === '/api/team/school' && method === 'POST') {
+        const user = await verifyToken(request, env);
+        if (!user || (user.role !== 'team' && user.role !== 'admin')) {
+          return json({ error: '无权访问' }, corsHeaders, 403);
+        }
+        const { school } = await request.json();
+        if (!school) return json({ error: '请选择学校' }, corsHeaders, 400);
+
+        const team = await env.DB.prepare('SELECT short FROM teams WHERE short = ?')
+          .bind(String(school).trim()).first();
+        if (!team) return json({ error: '该学校不存在' }, corsHeaders, 400);
+
+        await env.DB.prepare(
+          'INSERT INTO team_profiles (phone, school, created_at) VALUES (?, ?, ?) ' +
+          'ON CONFLICT(phone) DO UPDATE SET school = excluded.school'
+        ).bind(user.phone, team.short, new Date().toISOString()).run();
+
+        return json({ ok: true, school: team.short }, corsHeaders);
+      }
+
+      // 查询绑定学校：队长查自己，admin 可查指定 phone/school
+      if (path === '/api/team/school' && method === 'GET') {
+        const user = await verifyToken(request, env);
+        if (!user || (user.role !== 'team' && user.role !== 'admin')) {
+          return json({ error: '无权访问' }, corsHeaders, 403);
+        }
+        if (user.role === 'admin') {
+          const url = new URL(request.url);
+          const phone = url.searchParams.get('phone');
+          const school = url.searchParams.get('school');
+          if (school) {
+            const p = await env.DB.prepare('SELECT * FROM team_profiles WHERE school = ?').bind(school).first();
+            return json({ profile: p || null }, corsHeaders);
+          }
+          if (phone) {
+            const p = await env.DB.prepare('SELECT * FROM team_profiles WHERE phone = ?').bind(phone).first();
+            return json({ profile: p || null }, corsHeaders);
+          }
+          const all = await env.DB.prepare('SELECT * FROM team_profiles ORDER BY school').all();
+          return json({ profiles: all.results || [] }, corsHeaders);
+        }
+        const p = await env.DB.prepare('SELECT * FROM team_profiles WHERE phone = ?').bind(user.phone).first();
+        return json({ profile: p || null }, corsHeaders);
+      }
+
+      // 提交选手名单（覆盖式）：选手 uid+名字+位置，教练名字（无 uid）
+      if (path === '/api/team/players' && method === 'POST') {
+        const user = await verifyToken(request, env);
+        if (!user || (user.role !== 'team' && user.role !== 'admin')) {
+          return json({ error: '无权访问' }, corsHeaders, 403);
+        }
+
+        let school = null;
+        if (user.role === 'admin') {
+          const { school: s } = await request.json().catch(() => ({}));
+          school = s;
+        } else {
+          const profile = await env.DB.prepare('SELECT school FROM team_profiles WHERE phone = ?')
+            .bind(user.phone).first();
+          if (!profile) return json({ error: '请先绑定学校' }, corsHeaders, 400);
+          school = profile.school;
+        }
+        if (!school) return json({ error: '缺少学校' }, corsHeaders, 400);
+
+        const body = await request.json();
+        const players = Array.isArray(body.players) ? body.players : [];
+        const coachName = (body.coach && body.coach.name) ? String(body.coach.name).trim() : '';
+
+        const POSITIONS = ['求生', '监管', '双边'];
+        if (!players.length && !coachName) {
+          return json({ error: '请至少提交一名选手或教练' }, corsHeaders, 400);
+        }
+        for (const p of players) {
+          if (!p.name || !p.uid) return json({ error: '选手需填写 uid 和名字' }, corsHeaders, 400);
+          if (!POSITIONS.includes(p.position)) return json({ error: '位置必须是：求生/监管/双边' }, corsHeaders, 400);
+        }
+
+        const now = new Date().toISOString();
+        await env.DB.batch([
+          env.DB.prepare('DELETE FROM players WHERE school = ?').bind(school),
+          ...players.map(p => env.DB.prepare(
+            'INSERT INTO players (school, name, uid, position, is_coach, created_at) VALUES (?, ?, ?, ?, 0, ?)'
+          ).bind(school, String(p.name).trim(), String(p.uid).trim(), p.position, now)),
+          ...(coachName ? [env.DB.prepare(
+            'INSERT INTO players (school, name, uid, position, is_coach, created_at) VALUES (?, ?, ?, ?, 1, ?)'
+          ).bind(school, coachName, null, null, now)] : [])
+        ]);
+
+        return json({ ok: true, school, players: players.length, coach: coachName || null }, corsHeaders);
+      }
+
+      // 查询选手名单：队长查自己学校，admin 可按 school 查或查全部
+      if (path === '/api/team/players' && method === 'GET') {
+        const user = await verifyToken(request, env);
+        if (!user || (user.role !== 'team' && user.role !== 'admin' && user.role !== 'judge')) {
+          return json({ error: '无权访问' }, corsHeaders, 403);
+        }
+
+        const url = new URL(request.url);
+        let school = url.searchParams.get('school');
+        if (!school) {
+          if (user.role === 'admin') {
+            const all = await env.DB.prepare('SELECT * FROM players ORDER BY school, is_coach, id').all();
+            return json({ players: all.results || [] }, corsHeaders);
+          }
+          if (user.role === 'judge') {
+            return json({ error: '请指定要查看的学校 school 参数' }, corsHeaders, 400);
+          }
+          const profile = await env.DB.prepare('SELECT school FROM team_profiles WHERE phone = ?')
+            .bind(user.phone).first();
+          school = profile ? profile.school : '';
+          if (!school) return json({ players: [], school: null }, corsHeaders);
+        }
+        const rows = await env.DB.prepare('SELECT * FROM players WHERE school = ? ORDER BY is_coach, id')
+          .bind(school).all();
+        return json({ players: rows.results || [], school }, corsHeaders);
+      }
+
+      /* ============================================================
+         数据看板聚合接口（仅管理员）
+      ============================================================ */
+      if (path === '/api/dashboard' && method === 'GET') {
+        const user = await verifyToken(request, env);
+        if (!user || user.role !== 'admin') {
+          return json({ error: '无权访问' }, corsHeaders, 403);
+        }
+
+        const [teamsR, schedR, playersR, bindsR, annsR, usrsR] = await Promise.all([
+          env.DB.prepare('SELECT id, name, short, logo, created_at FROM teams ORDER BY id').all(),
+          env.DB.prepare('SELECT * FROM schedule ORDER BY id DESC LIMIT 1').first(),
+          env.DB.prepare('SELECT school, name, uid, position, is_coach FROM players ORDER BY school, is_coach, id').all(),
+          env.DB.prepare('SELECT * FROM team_profiles ORDER BY school').all(),
+          env.DB.prepare('SELECT id, tag, tag_class, time, text, created_at FROM announcements ORDER BY id DESC').all(),
+          env.DB.prepare('SELECT id, username, phone, role, created_at FROM users ORDER BY id').all()
+        ]);
+
+        const teams = teamsR.results || [];
+        const players = playersR.results || [];
+        const bindings = bindsR.results || [];
+        const announcements = annsR.results || [];
+        const users = usrsR.results || [];
+
+        let sched = null;
+        if (schedR) {
+          let matches = [];
+          try { matches = JSON.parse(schedR.matches); } catch (e) {}
+          sched = { id: schedR.id, title: schedR.title || '', matches, created_at: schedR.created_at };
+        }
+
+        /* 选手位置分布 + 各校选手数 + 教练数 */
+        const positions = { '求生': 0, '监管': 0, '双边': 0 };
+        const bySchool = {};
+        let coachesTotal = 0;
+        players.forEach(p => {
+          if (p.is_coach) { coachesTotal++; return; }
+          if (positions[p.position] !== undefined) positions[p.position]++;
+          bySchool[p.school] = (bySchool[p.school] || 0) + 1;
+        });
+        const playersBySchool = Object.keys(bySchool)
+          .map(s => ({ school: s, count: bySchool[s] }))
+          .sort((a, b) => b.count - a.count);
+
+        /* 用户角色分布 */
+        const roleDist = {};
+        users.forEach(u => { roleDist[u.role] = (roleDist[u.role] || 0) + 1; });
+
+        const stats = {
+          teams: teams.length,
+          scheduleMatches: sched ? sched.matches.length : 0,
+          schoolsBound: bindings.length,
+          playersTotal: players.length - coachesTotal,
+          coachesTotal,
+          announcements: announcements.length,
+          users: users.length
+        };
+
+        return json({ stats, teams, schedule: sched, players, playersBySchool, positions, coachesTotal, bindings, announcements, users, roleDist }, corsHeaders);
       }
 
       return json({ error: 'Not Found: ' + path }, corsHeaders, 404);

@@ -653,9 +653,18 @@ async function loadRoomsTool(box) {
     return;
   }
 
+  /* 队伍列表（用于选择对战双方 + 显示全称） */
+  let teams = [], nameMap = {};
+  try {
+    const td = await apiRequest('/api/teams');
+    teams = td.teams || [];
+    teams.forEach(t => { nameMap[t.short] = t.name; });
+  } catch (e) {}
+  const teamOpts = teams.map(t => `<option value="${sanitize(t.short)}">${sanitize(t.name)}（${sanitize(t.short)}）</option>`).join('');
+
   box.innerHTML = `
     <h3 class="tool-modal__title">比赛房间 <em>STAFF</em></h3>
-    <p class="tool-modal__sub">创建比赛房间号与密码，供选手进入。管理员与裁判均可查看。</p>
+    <p class="tool-modal__sub">创建比赛房间号与密码，填写比赛时间、对战双方与主客场，可查看双方选手名单。管理员与裁判均可操作。</p>
 
     <section class="tool-modal__section">
       <div class="tool-modal__section-head"><h4>新建房间</h4></div>
@@ -668,6 +677,24 @@ async function loadRoomsTool(box) {
           <div class="tool-field">
             <label for="roomPassword">密码</label>
             <input type="text" id="roomPassword" placeholder="例如：8888" maxlength="20">
+          </div>
+        </div>
+        <div class="tool-field">
+          <label for="roomStart">比赛开始时间</label>
+          <input type="datetime-local" id="roomStart">
+        </div>
+        <div class="tool-form__row">
+          <div class="tool-field">
+            <label for="roomTeamA">对战队伍 A</label>
+            <select id="roomTeamA"><option value="">-- 选择队伍 --</option>${teamOpts}</select>
+          </div>
+          <div class="tool-field">
+            <label for="roomTeamB">对战队伍 B</label>
+            <select id="roomTeamB"><option value="">-- 选择队伍 --</option>${teamOpts}</select>
+          </div>
+          <div class="tool-field">
+            <label for="roomHome">主客场</label>
+            <select id="roomHome"><option value="A">A 主场</option><option value="B">B 主场</option><option value="N">中立场地</option></select>
           </div>
         </div>
         <div class="tool-field">
@@ -689,12 +716,16 @@ async function loadRoomsTool(box) {
     </section>
   `;
 
-  renderRoomListBox(list);
+  renderRoomListBox(list, nameMap);
 
   document.getElementById('roomAddBtn').addEventListener('click', async () => {
     const code = (document.getElementById('roomCode').value || '').trim();
     const password = (document.getElementById('roomPassword').value || '').trim();
     const title = (document.getElementById('roomTitle').value || '').trim();
+    const start_time = document.getElementById('roomStart').value || '';
+    const team_a = (document.getElementById('roomTeamA').value || '').trim();
+    const team_b = (document.getElementById('roomTeamB').value || '').trim();
+    const home = (document.getElementById('roomHome').value || 'A');
     if (!code) { alert('房间号不能为空'); return; }
 
     const btn = document.getElementById('roomAddBtn');
@@ -705,13 +736,16 @@ async function loadRoomsTool(box) {
     try {
       await apiRequest('/api/rooms', {
         method: 'POST',
-        body: JSON.stringify({ code, password, title })
+        body: JSON.stringify({ code, password, title, start_time, team_a, team_b, home })
       });
       document.getElementById('roomCode').value = '';
       document.getElementById('roomPassword').value = '';
       document.getElementById('roomTitle').value = '';
+      document.getElementById('roomStart').value = '';
+      document.getElementById('roomTeamA').value = '';
+      document.getElementById('roomTeamB').value = '';
       const data = await apiRequest('/api/rooms');
-      renderRoomListBox(data.rooms || []);
+      renderRoomListBox(data.rooms || [], nameMap);
     } catch (err) {
       alert('创建失败：' + err.message);
     } finally {
@@ -721,7 +755,8 @@ async function loadRoomsTool(box) {
   });
 }
 
-function renderRoomListBox(list) {
+function renderRoomListBox(list, nameMap) {
+  nameMap = nameMap || {};
   const box = document.getElementById('roomList');
   const cnt = document.getElementById('roomCount');
   if (!box) return;
@@ -729,10 +764,17 @@ function renderRoomListBox(list) {
   if (!list.length) {
     box.innerHTML = '<li class="tool-list__empty">暂无房间</li>';
   } else {
+    const fullName = (short) => nameMap[short] ? nameMap[short] + '（' + short + '）' : (short || '—');
+    const fmtTime = (t) => { if (!t) return ''; const d = new Date(t); return isNaN(d) ? t : d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }); };
+    const homeText = (r) => {
+      if (!r.team_a || !r.team_b) return '';
+      if (r.home === 'B') return fullName(r.team_b) + ' 主场';
+      if (r.home === 'N') return '中立场地';
+      return fullName(r.team_a) + ' 主场';
+    };
     box.innerHTML = list.map(r => {
-      const timeStr = r.created_at
-        ? new Date(r.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-        : '';
+      const hasMatch = r.team_a && r.team_b;
+      const timeStr = fmtTime(r.created_at);
       return `
         <li class="room-card">
           <div class="room-card__code">
@@ -746,8 +788,17 @@ function renderRoomListBox(list) {
               <span>创建者 <b>${sanitize(r.creator || '—')}</b></span>
               <span>${sanitize(timeStr)}</span>
             </div>
+            ${hasMatch ? `
+            <div class="room-card__match">
+              <span class="room-card__start">开始 <b>${sanitize(fmtTime(r.start_time) || '待定')}</b></span>
+              <span class="room-card__vs"><b>${sanitize(fullName(r.team_a))}</b><em>VS</em><b>${sanitize(fullName(r.team_b))}</b><i class="room-card__home">${sanitize(homeText(r))}</i></span>
+            </div>` : ''}
           </div>
-          <button class="room-card__remove" data-room-remove="${r.id}" aria-label="删除">✕</button>
+          <div class="room-card__actions">
+            ${hasMatch ? `<button class="room-card__view" data-room-view="${r.id}">查看双方名单</button>` : ''}
+            <button class="room-card__remove" data-room-remove="${r.id}" aria-label="删除">✕</button>
+          </div>
+          <div class="room-card__roster" id="roster-${r.id}" hidden></div>
         </li>
       `;
     }).join('');
@@ -761,9 +812,38 @@ function renderRoomListBox(list) {
       try {
         await apiRequest('/api/rooms/' + id, { method: 'DELETE' });
         const data = await apiRequest('/api/rooms');
-        renderRoomListBox(data.rooms || []);
+        renderRoomListBox(data.rooms || [], nameMap);
       } catch (err) {
         alert('删除失败：' + err.message);
+      }
+    });
+  });
+
+  box.querySelectorAll('[data-room-view]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.roomView;
+      const rosterEl = document.getElementById('roster-' + id);
+      if (!rosterEl) return;
+      const room = (list || []).find(r => String(r.id) === String(id));
+      if (!room) return;
+      if (!rosterEl.hidden) { rosterEl.hidden = true; btn.textContent = '查看双方名单'; return; }
+      rosterEl.hidden = false;
+      btn.textContent = '收起名单';
+      rosterEl.innerHTML = '<div class="board__state">加载名单中…</div>';
+      try {
+        const [da, db] = await Promise.all([
+          apiRequest('/api/team/players?school=' + encodeURIComponent(room.team_a)),
+          apiRequest('/api/team/players?school=' + encodeURIComponent(room.team_b))
+        ]);
+        const fullA = nameMap[room.team_a] || room.team_a;
+        const fullB = nameMap[room.team_b] || room.team_b;
+        rosterEl.innerHTML =
+          '<div class="room-roster__cols">' +
+            '<div class="room-roster__col"><div class="room-roster__title">' + sanitize(fullA) + '（A 队）</div>' + renderPlayersList(da.players || [], room.team_a) + '</div>' +
+            '<div class="room-roster__col"><div class="room-roster__title">' + sanitize(fullB) + '（B 队）</div>' + renderPlayersList(db.players || [], room.team_b) + '</div>' +
+          '</div>';
+      } catch (err) {
+        rosterEl.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
       }
     });
   });
