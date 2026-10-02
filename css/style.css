@@ -737,3 +737,227 @@ main{flex:1;position:relative;z-index:1}
     0 8px 20px -8px rgba(120,220,200,1),
     inset 0 1px 0 rgba(255,255,255,.15);
 }
+
+/* ============================================================
+   比分展示（每局上半 / 下半）
+============================================================ */
+.match-score-display {
+  padding: 16px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(212,180,122,.12), rgba(166,139,212,.1));
+  border: 1px solid var(--line-strong);
+  text-align: center;
+}
+.match-score-display__main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.match-score-display__side {
+  font-size: 13px;
+  color: #fff;
+  font-weight: 900;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.match-score-display__num {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--gold-lt);
+  font-variant-numeric: tabular-nums;
+}
+.match-score-display__sep {
+  font-style: normal;
+  color: var(--muted);
+  font-weight: 900;
+  font-size: 20px;
+}
+.match-score-display__rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.match-round-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.035);
+  border: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--muted);
+}
+.match-round-row__label {
+  font-weight: 900;
+  color: var(--gold-lt);
+  letter-spacing: .5px;
+}
+.match-round-row__phase b {
+  color: #fff;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+}
+.match-round-row__total {
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+}
+.match-round-row__total b {
+  color: var(--cyan-lt);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+}
+
+/* 赛程卡片比分 */
+.schedule-card__score {
+  font-size: 13.5px;
+  font-weight: 900;
+  color: var(--gold-lt);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+/* ============================================================
+   完赛比分输入表单（每局含上半 / 下半）
+============================================================ */
+.match-result-form {
+  width: 100%;
+  margin-top: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--line);
+}
+.match-result-form[hidden] { display: none; }
+.match-result-form__title {
+  font-size: 12.5px;
+  color: var(--gold-lt);
+  font-weight: 900;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+.match-result-form__rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.match-result-round {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--line-soft);
+}
+.match-result-round__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.match-result-round__label {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--gold-lt);
+}
+.match-result-round__del {
+  appearance: none;
+  border: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,110,130,.1);
+  border: 1px solid rgba(255,110,130,.28);
+  color: var(--red-lt);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  transition: .2s;
+}
+.match-result-round__del:hover { background: rgba(255,110,130,.2); }
+
+.match-result-round__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.match-result-round__phase {
+  min-width: 48px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--muted);
+  letter-spacing: .5px;
+}
+.match-result-round__sep {
+  color: var(--muted);
+  font-weight: 900;
+}
+.match-result-round input {
+  width: 56px;
+  padding: 7px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #fff;
+  font-family: inherit;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+.match-result-round input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212,180,122,.12);
+}
+.match-result-round input::-webkit-outer-spin-button,
+.match-result-round input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.match-result-round input { -moz-appearance: textfield; }
+
+.match-result-form__preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(212,180,122,.1), rgba(166,139,212,.08));
+  border: 1px solid var(--line-strong);
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 12px;
+}
+.match-result-form__preview b {
+  color: var(--gold-lt);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.match-result-form__preview em {
+  font-style: normal;
+  color: var(--muted);
+  font-weight: 900;
+}
+.match-result-form__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

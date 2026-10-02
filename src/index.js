@@ -14,7 +14,12 @@ const DASHBOARD_TABLES = {
   schedule: { label: '赛程', primaryKey: 'id', columns: ['id', 'title', 'matches', 'created_at'], writable: true },
   team_profiles: { label: '队长学校绑定', primaryKey: 'phone', columns: ['phone', 'school', 'created_at'], writable: true },
   players: { label: '选手名单', primaryKey: 'id', columns: ['id', 'school', 'name', 'uid', 'position', 'is_coach', 'created_at'], writable: true },
-  match_appointments: { label: '约赛记录', primaryKey: 'id', columns: ['id', 'schedule_id', 'match_index', 'team_a', 'team_b', 'start_time', 'notes', 'booked_by_school', 'is_finished', 'created_by_phone', 'created_by_name', 'created_at'], writable: true },
+  match_appointments: {
+    label: '约赛记录',
+    primaryKey: 'id',
+    columns: ['id', 'schedule_id', 'match_index', 'team_a', 'team_b', 'start_time', 'notes', 'booked_by_school', 'is_finished', 'score_a', 'score_b', 'rounds', 'created_by_phone', 'created_by_name', 'created_at'],
+    writable: true
+  },
   match_signups: { label: '工作人员报名', primaryKey: 'id', columns: ['id', 'appointment_id', 'role', 'user_phone', 'username', 'created_at'], writable: true }
 };
 
@@ -74,15 +79,10 @@ export default {
           return json({ error: '请输入激活码' }, corsHeaders, 400);
         }
 
-        // 【修改点2】从本地 JSON 的 codes 数组中查找激活码
         const inputCode = inviteCode.trim().toUpperCase();
-        // 兼容大小写，JSON 里的小写激活码也能被匹配到
         const code = inviteCodesData.codes.find(c => c.code.toUpperCase() === inputCode);
 
         if (!code) return json({ error: '激活码无效' }, corsHeaders, 400);
-        
-        // 本地文件天然支持无限次使用，无需检查 used 状态
-        // if (code.used) return json({ error: '激活码已被使用' }, corsHeaders, 400);
 
         const exists = await env.DB.prepare(
           'SELECT id FROM users WHERE phone = ?'
@@ -96,13 +96,10 @@ export default {
 
         const hash = await sha256(password);
         const now = new Date().toISOString();
-        
-        // 注意：这里的 code.role 依然生效，对应你 JSON 里的 role 字段
+
         await env.DB.prepare(
           'INSERT INTO users (phone, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)'
         ).bind(phone, username, hash, code.role, now).run();
-
-        // 【修改点3】移除了更新激活码状态的 UPDATE 语句
 
         const user = { phone, username, role: code.role };
         const token = await signToken(user, env);
@@ -264,7 +261,6 @@ export default {
         const id = path.split('/').pop();
         const t = await env.DB.prepare('SELECT short FROM teams WHERE id = ?').bind(id).first();
         if (t) {
-          /* 级联清理该学校已提交的选手名单与队长绑定 */
           await env.DB.prepare('DELETE FROM players WHERE school = ?').bind(t.short).run();
           await env.DB.prepare('DELETE FROM team_profiles WHERE school = ?').bind(t.short).run();
         }
@@ -297,7 +293,6 @@ export default {
           const { code, password, title, start_time, team_a, team_b, home } = await request.json();
           if (!code) return json({ error: '房间号不能为空' }, corsHeaders, 400);
 
-          /* 对战双方队伍必须真实存在 */
           let teamA = null, teamB = null;
           if (team_a && team_b) {
             const rowA = await env.DB.prepare('SELECT short FROM teams WHERE short = ?').bind(team_a).first();
@@ -305,6 +300,12 @@ export default {
             if (!rowA || !rowB) return json({ error: '对战队伍不存在，请选择已登记的学校' }, corsHeaders, 400);
             if (team_a === team_b) return json({ error: '对战双方不能是同一支队伍' }, corsHeaders, 400);
             teamA = team_a; teamB = team_b;
+          }
+
+          let startTimeIso = '';
+          if (start_time) {
+            const parsed = parseBeijingTime(start_time);
+            startTimeIso = isNaN(parsed.getTime()) ? String(start_time) : parsed.toISOString();
           }
 
           const info = await env.DB.prepare(
@@ -315,7 +316,7 @@ export default {
             title || '',
             user.username || '匿名',
             new Date().toISOString(),
-            start_time || '',
+            startTimeIso,
             teamA,
             teamB,
             home || ''
@@ -386,7 +387,7 @@ export default {
       }
 
       /* ============================================================
-         赛事赛程（64 进 32 对阵表）
+         赛事赛程
       ============================================================ */
 
       if (path === '/api/schedule') {
@@ -413,7 +414,6 @@ export default {
             return json({ error: '对阵数据不能为空' }, corsHeaders, 400);
           }
 
-          // 规范化：每场对阵必须是 { a, b } 两个队伍简称
           const pairs = matches.map(m => {
             if (Array.isArray(m)) return { a: String(m[0] || '').trim(), b: String(m[1] || '').trim() };
             return {
@@ -444,10 +444,9 @@ export default {
       }
 
       /* ============================================================
-         队伍队长：绑定学校 + 提交选手名单
+         约赛 / 结果
       ============================================================ */
 
-      // 队长绑定学校（写入 team_profiles）
       if (path === '/api/match-appointments' && method === 'GET') {
         const scheduleId = Number(url.searchParams.get('schedule_id'));
         if (!Number.isInteger(scheduleId) || scheduleId < 1) {
@@ -492,7 +491,7 @@ export default {
         const body = await request.json();
         const scheduleId = Number(body.schedule_id);
         const matchIndex = Number(body.match_index);
-        const startTime = new Date(body.start_time);
+        const startTime = parseBeijingTime(body.start_time);
         if (!Number.isInteger(scheduleId) || scheduleId < 1 || !Number.isInteger(matchIndex) || matchIndex < 0 || Number.isNaN(startTime.getTime())) {
           return json({ error: '请选择有效对阵并填写比赛时间' }, corsHeaders, 400);
         }
@@ -539,11 +538,49 @@ export default {
         }
         const body = await request.json();
         if (typeof body.is_finished !== 'boolean') return json({ error: '完赛状态无效' }, corsHeaders, 400);
+
+        const appointmentId = Number(statusPath[1]);
+
+        /* ====== 恢复为未完赛：清空比分 ====== */
+        if (!body.is_finished) {
+          const update = await env.DB.prepare(
+            'UPDATE match_appointments SET is_finished = 0, score_a = NULL, score_b = NULL, rounds = NULL WHERE id = ?'
+          ).bind(appointmentId).run();
+          if (!update.meta.changes) return json({ error: '比赛安排不存在' }, corsHeaders, 404);
+          return json({ ok: true, is_finished: false }, corsHeaders);
+        }
+
+        /* ====== 标记为完赛：校验每局上半/下半场比分 ====== */
+        const roundsInput = body.rounds;
+        if (!Array.isArray(roundsInput) || !roundsInput.length) {
+          return json({ error: '请至少提交一局小比分' }, corsHeaders, 400);
+        }
+        if (roundsInput.length > 9) {
+          return json({ error: '局数过多（最多 9 局）' }, corsHeaders, 400);
+        }
+
+        const rounds = [];
+        let totalA = 0, totalB = 0;
+        for (let i = 0; i < roundsInput.length; i++) {
+          const r = roundsInput[i];
+          if (!r || !r.first || !r.second) {
+            return json({ error: `第 ${i + 1} 局缺少上半场或下半场` }, corsHeaders, 400);
+          }
+          const fa = Number(r.first.a), fb = Number(r.first.b);
+          const sa = Number(r.second.a), sb = Number(r.second.b);
+          if (![fa, fb, sa, sb].every(n => Number.isInteger(n) && n >= 0 && n <= 99)) {
+            return json({ error: `第 ${i + 1} 局的比分需为 0-99 的整数` }, corsHeaders, 400);
+          }
+          rounds.push({ first: { a: fa, b: fb }, second: { a: sa, b: sb } });
+          totalA += fa + sa;
+          totalB += fb + sb;
+        }
+
         const update = await env.DB.prepare(
-          'UPDATE match_appointments SET is_finished = ? WHERE id = ?'
-        ).bind(body.is_finished ? 1 : 0, Number(statusPath[1])).run();
+          'UPDATE match_appointments SET is_finished = 1, score_a = ?, score_b = ?, rounds = ? WHERE id = ?'
+        ).bind(totalA, totalB, JSON.stringify(rounds), appointmentId).run();
         if (!update.meta.changes) return json({ error: '比赛安排不存在' }, corsHeaders, 404);
-        return json({ ok: true, is_finished: body.is_finished }, corsHeaders);
+        return json({ ok: true, is_finished: true, score_a: totalA, score_b: totalB, rounds }, corsHeaders);
       }
 
       const signupPath = path.match(/^\/api\/match-appointments\/(\d+)\/signup$/);
@@ -599,7 +636,6 @@ export default {
         return json({ ok: true, school: team.short }, corsHeaders);
       }
 
-      // 查询绑定学校：队长查自己，admin 可查指定 phone/school
       if (path === '/api/team/school' && method === 'GET') {
         const user = await verifyToken(request, env);
         if (!user || (user.role !== 'team' && user.role !== 'admin')) {
@@ -624,7 +660,6 @@ export default {
         return json({ profile: p || null }, corsHeaders);
       }
 
-      // 提交选手名单（覆盖式）：选手 uid+名字+位置，教练名字（无 uid）
       if (path === '/api/team/players' && method === 'POST') {
         const user = await verifyToken(request, env);
         if (!user || (user.role !== 'team' && user.role !== 'admin')) {
@@ -670,7 +705,6 @@ export default {
         return json({ ok: true, school, players: players.length, coach: coachName || null }, corsHeaders);
       }
 
-      // 查询选手名单：队长查自己学校，admin 可按 school 查或查全部
       if (path === '/api/team/players' && method === 'GET') {
         const user = await verifyToken(request, env);
         if (!user || (user.role !== 'team' && user.role !== 'admin' && user.role !== 'judge')) {
@@ -794,7 +828,6 @@ export default {
           sched = { id: schedR.id, title: schedR.title || '', matches, created_at: schedR.created_at };
         }
 
-        /* 选手位置分布 + 各校选手数 + 教练数 */
         const positions = { '求生': 0, '监管': 0, '双边': 0 };
         const bySchool = {};
         let coachesTotal = 0;
@@ -807,7 +840,6 @@ export default {
           .map(s => ({ school: s, count: bySchool[s] }))
           .sort((a, b) => b.count - a.count);
 
-        /* 用户角色分布 */
         const roleDist = {};
         users.forEach(u => { roleDist[u.role] = (roleDist[u.role] || 0) + 1; });
 
@@ -901,4 +933,17 @@ async function verifyToken(request, env) {
   } catch {
     return null;
   }
+}
+
+/* 解析时间：无时区标记的按北京时间 (UTC+8) 处理 */
+function parseBeijingTime(value) {
+  if (!value) return new Date(NaN);
+  const raw = String(value).trim();
+  if (/[zZ]$/.test(raw) || /[+-]\d{2}:?\d{2}$/.test(raw)) return new Date(raw);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const [, Y, Mo, D, h, mi, s] = m;
+    return new Date(Date.UTC(+Y, +Mo - 1, +D, +h - 8, +mi, +(s || 0)));
+  }
+  return new Date(raw);
 }

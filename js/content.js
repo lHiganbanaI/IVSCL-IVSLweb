@@ -1,5 +1,5 @@
 /* ============================================================
-   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢
+   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分
 ============================================================ */
 
 import { apiRequest, getCurrentUser } from './api.js';
@@ -13,7 +13,6 @@ import {
 
 /* ============================================================
    /api/teams 请求缓存
-   —— 避免首屏、赛程页、各工具弹窗重复请求同一份数据
 ============================================================ */
 let __teamsPromise = null;
 let __teamLogosPromise = null;
@@ -38,7 +37,7 @@ export function showActionNotice(message, isError = false) {
 export function fetchTeams() {
   if (!__teamsPromise) {
     __teamsPromise = apiRequest('/api/teams?basic=1').catch(err => {
-      __teamsPromise = null;   // 失败允许下次重试
+      __teamsPromise = null;
       throw err;
     });
   }
@@ -148,7 +147,6 @@ export async function loadQAs() {
 
   let list = null;
   try {
-    /* 静态 JSON 交给浏览器默认缓存，不再每次强制下载 */
     const res = await fetch('data/qas.json');
     if (res.ok) {
       const data = await res.json();
@@ -420,7 +418,7 @@ export async function loadStaff() {
 }
 
 /* ============================================================
-   赛事赛程（64 进 32 对阵表）
+   赛事赛程
 ============================================================ */
 function teamLogoSrc(short, logoMap) {
   if (logoMap && logoMap[short]) return logoMap[short];
@@ -440,10 +438,140 @@ function scheduleSideHtml(short, logoMap, nameMap) {
   `;
 }
 
-/* 统一使用北京时间显示比赛时间 */
 function formatMatchTime(value) {
   if (!value) return '';
   return formatBeijing(value) || String(value);
+}
+
+/* 从 appointment 取大比分显示字符串 */
+function scoreText(appointment) {
+  if (!appointment || !appointment.is_finished) return '';
+  if (appointment.score_a == null || appointment.score_b == null) return '';
+  return `${appointment.score_a} : ${appointment.score_b}`;
+}
+
+/* ====== 比分相关 ====== */
+/* 解析已存 rounds JSON（兼容旧格式 [{a,b}]，升级为 {first,second}） */
+function parseRounds(raw) {
+  if (!raw) return [];
+  let arr;
+  try { arr = JSON.parse(raw); } catch (e) { return []; }
+  if (!Array.isArray(arr)) return [];
+  return arr.map(r => {
+    if (r && r.first && r.second) {
+      return {
+        first:  { a: Number(r.first.a)  || 0, b: Number(r.first.b)  || 0 },
+        second: { a: Number(r.second.a) || 0, b: Number(r.second.b) || 0 }
+      };
+    }
+    if (r && (r.a != null || r.b != null)) {
+      return {
+        first:  { a: Number(r.a) || 0, b: Number(r.b) || 0 },
+        second: { a: 0, b: 0 }
+      };
+    }
+    return { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } };
+  });
+}
+
+/* 计算 rounds 双方总分 */
+function computeTotals(rounds) {
+  let a = 0, b = 0;
+  for (const r of rounds) {
+    a += (r.first?.a || 0) + (r.second?.a || 0);
+    b += (r.first?.b || 0) + (r.second?.b || 0);
+  }
+  return { a, b };
+}
+
+/* 完赛表单每一局 HTML */
+function roundRowHtml(round, index) {
+  const fa = round?.first?.a ?? 0;
+  const fb = round?.first?.b ?? 0;
+  const sa = round?.second?.a ?? 0;
+  const sb = round?.second?.b ?? 0;
+  return `
+    <div class="match-result-round" data-round-index="${index}">
+      <div class="match-result-round__head">
+        <span class="match-result-round__label">第 ${index + 1} 局</span>
+        <button class="match-result-round__del" type="button" aria-label="删除该局">✕</button>
+      </div>
+      <div class="match-result-round__row">
+        <span class="match-result-round__phase">上半场</span>
+        <input type="number" class="mrr-first-a" min="0" max="99" value="${fa}" inputmode="numeric">
+        <span class="match-result-round__sep">:</span>
+        <input type="number" class="mrr-first-b" min="0" max="99" value="${fb}" inputmode="numeric">
+      </div>
+      <div class="match-result-round__row">
+        <span class="match-result-round__phase">下半场</span>
+        <input type="number" class="mrr-second-a" min="0" max="99" value="${sa}" inputmode="numeric">
+        <span class="match-result-round__sep">:</span>
+        <input type="number" class="mrr-second-b" min="0" max="99" value="${sb}" inputmode="numeric">
+      </div>
+    </div>
+  `;
+}
+
+/* 展示每局已保存的比分 */
+function roundDisplayHtml(round, index) {
+  const totalA = (round.first?.a || 0) + (round.second?.a || 0);
+  const totalB = (round.first?.b || 0) + (round.second?.b || 0);
+  return `
+    <div class="match-round-row">
+      <span class="match-round-row__label">第 ${index + 1} 局</span>
+      <span class="match-round-row__phase">上半 <b>${round.first?.a ?? 0} : ${round.first?.b ?? 0}</b></span>
+      <span class="match-round-row__phase">下半 <b>${round.second?.a ?? 0} : ${round.second?.b ?? 0}</b></span>
+      <span class="match-round-row__total">总分 <b>${totalA} : ${totalB}</b></span>
+    </div>
+  `;
+}
+
+/* 绑定每局的删除按钮 */
+function bindRoundDelete(roundsBox) {
+  roundsBox.querySelectorAll('.match-result-round').forEach(row => {
+    const del = row.querySelector('.match-result-round__del');
+    if (!del || del.dataset.bound === 'true') return;
+    del.dataset.bound = 'true';
+    del.addEventListener('click', () => {
+      if (roundsBox.children.length <= 1) {
+        showActionNotice('至少保留一局', true);
+        return;
+      }
+      row.remove();
+      [...roundsBox.children].forEach((r, i) => {
+        r.dataset.roundIndex = i;
+        const label = r.querySelector('.match-result-round__label');
+        if (label) label.textContent = `第 ${i + 1} 局`;
+      });
+    });
+  });
+}
+
+/* 绑定每局输入，实时更新大比分预览 */
+function bindRoundInputs(roundsBox, content) {
+  const inputs = roundsBox.querySelectorAll('.match-result-round input');
+  inputs.forEach(inp => {
+    if (inp.dataset.bound === 'true') return;
+    inp.dataset.bound = 'true';
+    inp.addEventListener('input', () => refreshPreview(roundsBox, content));
+  });
+  refreshPreview(roundsBox, content);
+}
+
+/* 根据当前所有半场输入，刷新预览大比分 */
+function refreshPreview(roundsBox, content) {
+  const rows = [...roundsBox.querySelectorAll('.match-result-round')];
+  let totalA = 0, totalB = 0;
+  for (const row of rows) {
+    totalA += (Number(row.querySelector('.mrr-first-a').value)  || 0)
+            + (Number(row.querySelector('.mrr-second-a').value) || 0);
+    totalB += (Number(row.querySelector('.mrr-first-b').value)  || 0)
+            + (Number(row.querySelector('.mrr-second-b').value) || 0);
+  }
+  const pA = content.querySelector('#previewScoreA');
+  const pB = content.querySelector('#previewScoreB');
+  if (pA) pA.textContent = totalA;
+  if (pB) pB.textContent = totalB;
 }
 
 function ensureMatchDetailsModal() {
@@ -473,10 +601,32 @@ function showMatchDetails(match, appointment) {
   const signups = appointment?.signups || [];
   const mySignups = signups.filter(s => s.is_mine);
   const time = appointment?.start_time ? formatMatchTime(appointment.start_time) : '队伍尚未约定时间';
+
+  const rounds = parseRounds(appointment?.rounds);
+  const hasScore = appointment?.is_finished && appointment.score_a != null && appointment.score_b != null;
+
+  /* ===== 已完赛：显示大比分 + 每局明细 ===== */
+  const scoreHtml = hasScore ? `
+    <div class="match-score-display">
+      <div class="match-score-display__main">
+        <span class="match-score-display__side">${sanitize(match.a)}</span>
+        <b class="match-score-display__num">${appointment.score_a}</b>
+        <em class="match-score-display__sep">:</em>
+        <b class="match-score-display__num">${appointment.score_b}</b>
+        <span class="match-score-display__side">${sanitize(match.b)}</span>
+      </div>
+      ${rounds.length ? `
+        <div class="match-score-display__rounds">
+          ${rounds.map((r, i) => roundDisplayHtml(r, i)).join('')}
+        </div>` : ''}
+    </div>
+  ` : '';
+
   const signupList = (role, label) => {
     const names = signups.filter(s => s.role === role).map(s => `<li>${sanitize(s.username)}</li>`).join('');
     return `<div class="match-signup-group"><b>${label}报名（${signups.filter(s => s.role === role).length}）</b>${names ? `<ul>${names}</ul>` : '<p>暂无报名</p>'}</div>`;
   };
+
   let signupAction = '<p class="draw-info">登录裁判或解说账号后可以报名。</p>';
   if (user && ['judge', 'commentator', 'admin'].includes(user.role) && appointment) {
     const roles = user.role === 'admin' ? ['judge', 'commentator'] : [user.role];
@@ -486,13 +636,53 @@ function showMatchDetails(match, appointment) {
       return `<button class="btn ${signed ? 'btn--ghost' : 'btn--primary'} btn--sm match-signup-button" data-signup-role="${role}" type="button">${signed ? '取消' : '报名'}${label}</button>`;
     }).join('')}<p class="draw-info" id="matchSignupMessage" role="status" aria-live="polite"></p>`;
   }
+
   const isJudge = user && ['judge', 'admin'].includes(user.role);
-  const finishAction = appointment && isJudge
-    ? `<button class="btn btn--ghost btn--sm" id="matchFinishBtn" type="button">${appointment.is_finished ? '恢复为未完赛' : '标记为已完赛'}</button><p class="draw-info" id="matchFinishMessage" role="status" aria-live="polite"></p>`
-    : '';
+
+  /* ===== 完赛 / 恢复操作区 ===== */
+  let finishAction = '';
+  if (appointment && isJudge) {
+    if (appointment.is_finished) {
+      finishAction = `
+        <button class="btn btn--ghost btn--sm" id="matchFinishBtn" type="button">恢复为未完赛</button>
+        <p class="draw-info" id="matchFinishMessage" role="status" aria-live="polite"></p>
+      `;
+    } else {
+      const defaultRounds = [
+        { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
+        { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
+        { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } }
+      ];
+      finishAction = `
+        <button class="btn btn--primary btn--sm" id="matchFinishToggleBtn" type="button">🏁 标记为已完赛</button>
+        <div class="match-result-form" id="matchResultForm" hidden>
+          <h4 class="match-result-form__title">提交比赛结果</h4>
+          <p class="draw-info" style="margin:0 0 12px">
+            每局分「上半场」「下半场」，分别填写双方比分。大比分由所有半场自动累加。
+          </p>
+          <div class="match-result-form__rounds" id="resultRounds">
+            ${defaultRounds.map((r, i) => roundRowHtml(r, i)).join('')}
+          </div>
+          <div class="match-result-form__preview" id="resultPreview">
+            <span>大比分预览：</span>
+            <b>${sanitize(match.a)} <span id="previewScoreA">0</span></b>
+            <em>:</em>
+            <b><span id="previewScoreB">0</span> ${sanitize(match.b)}</b>
+          </div>
+          <div class="match-result-form__actions">
+            <button class="btn btn--ghost btn--sm" id="resultAddRound" type="button">+ 添加一局</button>
+            <button class="btn btn--primary btn--sm" id="resultSubmitBtn" type="button">✅ 提交比分并完赛</button>
+          </div>
+          <p class="draw-info" id="matchFinishMessage" role="status" aria-live="polite"></p>
+        </div>
+      `;
+    }
+  }
+
   content.innerHTML = `
     <h3 class="tool-modal__title" id="matchDetailsTitle">${sanitize(match.a)} VS ${sanitize(match.b)} <em>比赛详情</em></h3>
     <div class="match-detail-status ${appointment?.is_finished ? 'match-detail-status--finished' : appointment ? 'match-detail-status--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</div>
+    ${scoreHtml}
     <section class="match-detail-section" aria-label="比赛安排">
       <h4>比赛安排</h4>
       <div class="tool-modal__info"><b>比赛时间：</b>${sanitize(time)}</div>
@@ -503,9 +693,12 @@ function showMatchDetails(match, appointment) {
     ${appointment ? `<section class="match-detail-section" aria-label="工作人员报名"><h4>工作人员报名</h4>${signupList('judge', '裁判')}${signupList('commentator', '解说')}</section>` : '<p class="draw-info">队长提交比赛时间后，裁判和解说可以在这里报名。</p>'}
     <div class="tool-actions">${signupAction}${finishAction}</div>
   `;
+
   mask.classList.add('is-open');
   mask.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
+
+  /* ====== 报名按钮 ====== */
   content.querySelectorAll('.match-signup-button').forEach(signupButton => signupButton.addEventListener('click', async () => {
     const signupRole = signupButton.dataset.signupRole;
     const isSigned = mySignups.some(s => s.role === signupRole);
@@ -525,32 +718,118 @@ function showMatchDetails(match, appointment) {
       const updated = currentAppointments.find(a => a.id === appointment.id);
       showMatchDetails(match, updated);
     } catch (err) {
-      showActionNotice(mutationComplete ? '操作已成功，但赛程刷新失败，请重新打开详情查看' : err.message, true);
+      showActionNotice(mutationComplete ? '操作已成功，但赛程刷新失败' : err.message, true);
       const message = content.querySelector('#matchSignupMessage');
-      if (message) message.textContent = mutationComplete ? '操作已成功，详情刷新失败，请重新打开查看。' : err.message;
+      if (message) message.textContent = mutationComplete ? '操作已成功，详情刷新失败。' : err.message;
       signupButton.disabled = false;
     }
   }));
-  const finishButton = content.querySelector('#matchFinishBtn');
-  if (finishButton) finishButton.addEventListener('click', async () => {
-    finishButton.disabled = true;
+
+  /* ====== 恢复为未完赛 ====== */
+  const finishBtn = content.querySelector('#matchFinishBtn');
+  if (finishBtn) finishBtn.addEventListener('click', async () => {
+    if (!confirm('确定要恢复为未完赛吗？已有的比分记录会被清空。')) return;
+    finishBtn.disabled = true;
     let mutationComplete = false;
     try {
       await apiRequest(`/api/match-appointments/${appointment.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ is_finished: !appointment.is_finished })
+        body: JSON.stringify({ is_finished: false })
       });
       mutationComplete = true;
-      showActionNotice(appointment.is_finished ? '比赛已恢复为未完赛' : '已标记为完赛');
+      showActionNotice('比赛已恢复为未完赛，比分已清空');
       const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
       currentAppointments = data.appointments || [];
       renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments);
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
     } catch (err) {
-      showActionNotice(mutationComplete ? '状态已更新，但赛程刷新失败，请重新打开详情查看' : err.message, true);
+      showActionNotice(mutationComplete ? '状态已更新，但赛程刷新失败' : err.message, true);
       const message = content.querySelector('#matchFinishMessage');
-      if (message) message.textContent = mutationComplete ? '状态已更新，详情刷新失败，请重新打开查看。' : err.message;
-      finishButton.disabled = false;
+      if (message) message.textContent = err.message;
+      finishBtn.disabled = false;
+    }
+  });
+
+  /* ====== 展开完赛表单 ====== */
+  const toggleBtn = content.querySelector('#matchFinishToggleBtn');
+  const resultForm = content.querySelector('#matchResultForm');
+  if (toggleBtn && resultForm) {
+    toggleBtn.addEventListener('click', () => {
+      resultForm.hidden = !resultForm.hidden;
+      if (!resultForm.hidden) {
+        const roundsBox = content.querySelector('#resultRounds');
+        if (roundsBox) {
+          bindRoundDelete(roundsBox);
+          bindRoundInputs(roundsBox, content);
+        }
+      }
+    });
+  }
+
+  /* ====== 绑定每局输入 + 添加一局 ====== */
+  const roundsBox = content.querySelector('#resultRounds');
+  const addRoundBtn = content.querySelector('#resultAddRound');
+  if (roundsBox) {
+    bindRoundDelete(roundsBox);
+    bindRoundInputs(roundsBox, content);
+  }
+  if (addRoundBtn && roundsBox) {
+    addRoundBtn.addEventListener('click', () => {
+      const idx = roundsBox.children.length;
+      if (idx >= 9) { showActionNotice('最多 9 局', true); return; }
+      roundsBox.insertAdjacentHTML('beforeend', roundRowHtml({ first: { a: 0, b: 0 }, second: { a: 0, b: 0 } }, idx));
+      bindRoundDelete(roundsBox);
+      bindRoundInputs(roundsBox, content);
+    });
+  }
+
+  /* ====== 提交比分并完赛 ====== */
+  const submitBtn = content.querySelector('#resultSubmitBtn');
+  if (submitBtn) submitBtn.addEventListener('click', async () => {
+    const roundRows = [...content.querySelectorAll('.match-result-round')];
+    if (!roundRows.length) return showActionNotice('请至少填写一局小比分', true);
+
+    const rounds = roundRows.map(row => ({
+      first: {
+        a: Number(row.querySelector('.mrr-first-a').value),
+        b: Number(row.querySelector('.mrr-first-b').value)
+      },
+      second: {
+        a: Number(row.querySelector('.mrr-second-a').value),
+        b: Number(row.querySelector('.mrr-second-b').value)
+      }
+    }));
+
+    /* 前端基础校验 */
+    for (let i = 0; i < rounds.length; i++) {
+      const r = rounds[i];
+      const vals = [r.first.a, r.first.b, r.second.a, r.second.b];
+      if (!vals.every(n => Number.isInteger(n) && n >= 0 && n <= 99)) {
+        return showActionNotice(`第 ${i + 1} 局比分必须是 0-99 的整数`, true);
+      }
+    }
+
+    submitBtn.disabled = true;
+    const original = submitBtn.textContent;
+    submitBtn.textContent = '提交中…';
+    let mutationComplete = false;
+    try {
+      await apiRequest(`/api/match-appointments/${appointment.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_finished: true, rounds })
+      });
+      mutationComplete = true;
+      showActionNotice('比分已提交');
+      const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
+      currentAppointments = data.appointments || [];
+      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments);
+      showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
+    } catch (err) {
+      showActionNotice(mutationComplete ? '比分已提交，但刷新失败' : err.message, true);
+      const message = content.querySelector('#matchFinishMessage');
+      if (message) message.textContent = err.message;
+      submitBtn.disabled = false;
+      submitBtn.textContent = original;
     }
   });
 }
@@ -594,11 +873,14 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     const status = appointment?.is_finished ? 'finished' : appointment ? 'scheduled' : 'unbooked';
     const appointmentTime = appointment ? `<span class="schedule-card__time">${sanitize(formatMatchTime(appointment.start_time))}</span>` : '';
     const appointmentStaff = appointment ? `<span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>` : '';
+    const score = scoreText(appointment);
+    const scoreHtml = score ? `<span class="schedule-card__score">${score}</span>` : '';
     return `
     <div class="schedule-card ${appointment?.is_finished ? 'schedule-card--finished' : ''}" role="button" tabindex="0" data-match-index="${i}" data-schedule-status="${status}" data-team-search="${sanitize(`${p.a || ''} ${p.b || ''}`)}" aria-label="查看 ${sanitize(p.a || '轮空')} 对阵 ${sanitize(p.b || '轮空')} 详情">
       ${scheduleSideHtml(p.a, logoMap, nameMap)}
       <div class="schedule-card__center">
         <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
+        ${scoreHtml}
         ${appointmentTime}
         <div class="schedule-card__vs">VS</div>
         ${appointmentStaff}
@@ -684,15 +966,12 @@ export async function loadSchedule() {
       renderSchedule([], box, '', {}, {});
       return;
     }
-    // 赛程接口返回后立即先画出对阵，不等队伍图片或报名详情。
     renderSchedule(s.matches, box, s.title, {}, {}, s.id, []);
     const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${s.id}`).catch(() => ({ appointments: [] }));
     if (loadSequence !== scheduleLoadSequence || !box.isConnected) return;
     const appointments = appointmentData.appointments || [];
     renderSchedule(s.matches, box, s.title, {}, {}, s.id, appointments);
 
-    // 名称和图片不影响对阵、时间和报名状态，放到后台补齐。旧版 Worker
-    // 的 /api/teams 仍会返回 logo，新版则由 /api/team-logos 单独提供。
     let nameMap = {};
     let logoMap = {};
     const applyTeamDisplay = () => {
@@ -732,8 +1011,7 @@ export async function loadSchedule() {
 }
 
 /* ============================================================
-   首屏内容（只加载主页需要的）
-   其他 tab 内容由 main.js 在切换时按需加载
+   首屏内容
 ============================================================ */
 export function initContent() {
   loadAnnouncements();
