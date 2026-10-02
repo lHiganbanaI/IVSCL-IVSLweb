@@ -451,7 +451,6 @@ function scoreText(appointment) {
 }
 
 /* ====== 比分相关 ====== */
-/* 解析已存 rounds JSON（兼容旧格式 [{a,b}]，升级为 {first,second}） */
 function parseRounds(raw) {
   if (!raw) return [];
   let arr;
@@ -474,7 +473,6 @@ function parseRounds(raw) {
   });
 }
 
-/* 计算 rounds 双方总分 */
 function computeTotals(rounds) {
   let a = 0, b = 0;
   for (const r of rounds) {
@@ -484,7 +482,6 @@ function computeTotals(rounds) {
   return { a, b };
 }
 
-/* 完赛表单每一局 HTML */
 function roundRowHtml(round, index) {
   const fa = round?.first?.a ?? 0;
   const fb = round?.first?.b ?? 0;
@@ -512,7 +509,6 @@ function roundRowHtml(round, index) {
   `;
 }
 
-/* 展示每局已保存的比分 */
 function roundDisplayHtml(round, index) {
   const totalA = (round.first?.a || 0) + (round.second?.a || 0);
   const totalB = (round.first?.b || 0) + (round.second?.b || 0);
@@ -526,7 +522,6 @@ function roundDisplayHtml(round, index) {
   `;
 }
 
-/* 绑定每局的删除按钮 */
 function bindRoundDelete(roundsBox) {
   roundsBox.querySelectorAll('.match-result-round').forEach(row => {
     const del = row.querySelector('.match-result-round__del');
@@ -547,7 +542,6 @@ function bindRoundDelete(roundsBox) {
   });
 }
 
-/* 绑定每局输入，实时更新大比分预览 */
 function bindRoundInputs(roundsBox, content) {
   const inputs = roundsBox.querySelectorAll('.match-result-round input');
   inputs.forEach(inp => {
@@ -558,7 +552,6 @@ function bindRoundInputs(roundsBox, content) {
   refreshPreview(roundsBox, content);
 }
 
-/* 根据当前所有半场输入，刷新预览大比分 */
 function refreshPreview(roundsBox, content) {
   const rows = [...roundsBox.querySelectorAll('.match-result-round')];
   let totalA = 0, totalB = 0;
@@ -602,18 +595,20 @@ function showMatchDetails(match, appointment) {
   const mySignups = signups.filter(s => s.is_mine);
   const time = appointment?.start_time ? formatMatchTime(appointment.start_time) : '队伍尚未约定时间';
 
+  const teamAName = (currentScheduleNameMap && currentScheduleNameMap[match.a]) || match.a || '队伍 A';
+  const teamBName = (currentScheduleNameMap && currentScheduleNameMap[match.b]) || match.b || '队伍 B';
+
   const rounds = parseRounds(appointment?.rounds);
   const hasScore = appointment?.is_finished && appointment.score_a != null && appointment.score_b != null;
 
-  /* ===== 已完赛：显示大比分 + 每局明细 ===== */
   const scoreHtml = hasScore ? `
     <div class="match-score-display">
       <div class="match-score-display__main">
-        <span class="match-score-display__side">${sanitize(match.a)}</span>
+        <span class="match-score-display__side">${sanitize(teamAName)}</span>
         <b class="match-score-display__num">${appointment.score_a}</b>
         <em class="match-score-display__sep">:</em>
         <b class="match-score-display__num">${appointment.score_b}</b>
-        <span class="match-score-display__side">${sanitize(match.b)}</span>
+        <span class="match-score-display__side">${sanitize(teamBName)}</span>
       </div>
       ${rounds.length ? `
         <div class="match-score-display__rounds">
@@ -639,48 +634,57 @@ function showMatchDetails(match, appointment) {
 
   const isJudge = user && ['judge', 'admin'].includes(user.role);
 
-  /* ===== 完赛 / 恢复操作区 ===== */
+  /* 表单默认局数：优先回填已存 rounds；没有则 3 局空数据 */
+  const formDefaultRounds = rounds.length ? rounds : [
+    { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
+    { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
+    { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } }
+  ];
+
+  const renderResultForm = (submitLabel) => `
+    <div class="match-result-form" id="matchResultForm" hidden>
+      <div class="match-result-form__header">
+        <span class="match-result-form__team-name">${sanitize(teamAName)}</span>
+        <span class="match-result-form__vs">VS</span>
+        <span class="match-result-form__team-name">${sanitize(teamBName)}</span>
+      </div>
+      <div class="match-result-form__rounds" id="resultRounds">
+        ${formDefaultRounds.map((r, i) => roundRowHtml(r, i)).join('')}
+      </div>
+      <div class="match-result-form__preview" id="resultPreview">
+        <span>大比分预览：</span>
+        <b>${sanitize(teamAName)} <span id="previewScoreA">0</span></b>
+        <em>:</em>
+        <b><span id="previewScoreB">0</span> ${sanitize(teamBName)}</b>
+      </div>
+      <div class="match-result-form__actions">
+        <button class="btn btn--ghost btn--sm" id="resultAddRound" type="button">+ 添加一局</button>
+        <button class="btn btn--primary btn--sm" id="resultSubmitBtn" type="button">${submitLabel}</button>
+      </div>
+      <p class="draw-info" id="matchFinishMessage2" role="status" aria-live="polite"></p>
+    </div>
+  `;
+
   let finishAction = '';
   if (appointment && isJudge) {
     if (appointment.is_finished) {
+      const toggleLabel = hasScore ? '📝 修改比分' : '📝 补录比分';
+      const submitLabel = hasScore ? '✅ 保存比分' : '✅ 提交比分';
       finishAction = `
+        <button class="btn btn--primary btn--sm" id="matchFinishToggleBtn" type="button">${toggleLabel}</button>
         <button class="btn btn--ghost btn--sm" id="matchFinishBtn" type="button">恢复为未完赛</button>
-        <p class="draw-info" id="matchFinishMessage" role="status" aria-live="polite"></p>
+        ${renderResultForm(submitLabel)}
       `;
     } else {
-      const defaultRounds = [
-        { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
-        { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
-        { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } }
-      ];
       finishAction = `
-        <button class="btn btn--primary btn--sm" id="matchFinishToggleBtn" type="button">🏁 标记为已完赛</button>
-        <div class="match-result-form" id="matchResultForm" hidden>
-          <h4 class="match-result-form__title">提交比赛结果</h4>
-          <p class="draw-info" style="margin:0 0 12px">
-            每局分「上半场」「下半场」，分别填写双方比分。大比分由所有半场自动累加。
-          </p>
-          <div class="match-result-form__rounds" id="resultRounds">
-            ${defaultRounds.map((r, i) => roundRowHtml(r, i)).join('')}
-          </div>
-          <div class="match-result-form__preview" id="resultPreview">
-            <span>大比分预览：</span>
-            <b>${sanitize(match.a)} <span id="previewScoreA">0</span></b>
-            <em>:</em>
-            <b><span id="previewScoreB">0</span> ${sanitize(match.b)}</b>
-          </div>
-          <div class="match-result-form__actions">
-            <button class="btn btn--ghost btn--sm" id="resultAddRound" type="button">+ 添加一局</button>
-            <button class="btn btn--primary btn--sm" id="resultSubmitBtn" type="button">✅ 提交比分并完赛</button>
-          </div>
-          <p class="draw-info" id="matchFinishMessage" role="status" aria-live="polite"></p>
-        </div>
+        <button class="btn btn--primary btn--sm" id="matchFinishToggleBtn" type="button">📝 提交赛事比分</button>
+        ${renderResultForm('✅ 提交比分并完赛')}
       `;
     }
   }
 
   content.innerHTML = `
-    <h3 class="tool-modal__title" id="matchDetailsTitle">${sanitize(match.a)} VS ${sanitize(match.b)} <em>比赛详情</em></h3>
+    <h3 class="tool-modal__title" id="matchDetailsTitle">${sanitize(teamAName)} VS ${sanitize(teamBName)} <em>比赛详情</em></h3>
     <div class="match-detail-status ${appointment?.is_finished ? 'match-detail-status--finished' : appointment ? 'match-detail-status--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</div>
     ${scoreHtml}
     <section class="match-detail-section" aria-label="比赛安排">
@@ -698,7 +702,7 @@ function showMatchDetails(match, appointment) {
   mask.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
 
-  /* ====== 报名按钮 ====== */
+  /* 报名按钮 */
   content.querySelectorAll('.match-signup-button').forEach(signupButton => signupButton.addEventListener('click', async () => {
     const signupRole = signupButton.dataset.signupRole;
     const isSigned = mySignups.some(s => s.role === signupRole);
@@ -725,7 +729,7 @@ function showMatchDetails(match, appointment) {
     }
   }));
 
-  /* ====== 恢复为未完赛 ====== */
+  /* 恢复为未完赛 */
   const finishBtn = content.querySelector('#matchFinishBtn');
   if (finishBtn) finishBtn.addEventListener('click', async () => {
     if (!confirm('确定要恢复为未完赛吗？已有的比分记录会被清空。')) return;
@@ -744,13 +748,13 @@ function showMatchDetails(match, appointment) {
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
     } catch (err) {
       showActionNotice(mutationComplete ? '状态已更新，但赛程刷新失败' : err.message, true);
-      const message = content.querySelector('#matchFinishMessage');
+      const message = content.querySelector('#matchFinishMessage2');
       if (message) message.textContent = err.message;
       finishBtn.disabled = false;
     }
   });
 
-  /* ====== 展开完赛表单 ====== */
+  /* 展开比分表单 */
   const toggleBtn = content.querySelector('#matchFinishToggleBtn');
   const resultForm = content.querySelector('#matchResultForm');
   if (toggleBtn && resultForm) {
@@ -766,7 +770,6 @@ function showMatchDetails(match, appointment) {
     });
   }
 
-  /* ====== 绑定每局输入 + 添加一局 ====== */
   const roundsBox = content.querySelector('#resultRounds');
   const addRoundBtn = content.querySelector('#resultAddRound');
   if (roundsBox) {
@@ -783,7 +786,7 @@ function showMatchDetails(match, appointment) {
     });
   }
 
-  /* ====== 提交比分并完赛 ====== */
+  /* 提交比分 */
   const submitBtn = content.querySelector('#resultSubmitBtn');
   if (submitBtn) submitBtn.addEventListener('click', async () => {
     const roundRows = [...content.querySelectorAll('.match-result-round')];
@@ -800,7 +803,6 @@ function showMatchDetails(match, appointment) {
       }
     }));
 
-    /* 前端基础校验 */
     for (let i = 0; i < rounds.length; i++) {
       const r = rounds[i];
       const vals = [r.first.a, r.first.b, r.second.a, r.second.b];
@@ -819,14 +821,14 @@ function showMatchDetails(match, appointment) {
         body: JSON.stringify({ is_finished: true, rounds })
       });
       mutationComplete = true;
-      showActionNotice('比分已提交');
+      showActionNotice('比分已保存');
       const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
       currentAppointments = data.appointments || [];
       renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments);
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
     } catch (err) {
-      showActionNotice(mutationComplete ? '比分已提交，但刷新失败' : err.message, true);
-      const message = content.querySelector('#matchFinishMessage');
+      showActionNotice(mutationComplete ? '比分已保存，但刷新失败' : err.message, true);
+      const message = content.querySelector('#matchFinishMessage2');
       if (message) message.textContent = err.message;
       submitBtn.disabled = false;
       submitBtn.textContent = original;
@@ -873,16 +875,26 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     const status = appointment?.is_finished ? 'finished' : appointment ? 'scheduled' : 'unbooked';
     const appointmentTime = appointment ? `<span class="schedule-card__time">${sanitize(formatMatchTime(appointment.start_time))}</span>` : '';
     const appointmentStaff = appointment ? `<span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>` : '';
+
+    /* 中间区：比分 / 待补录 / VS */
     const score = scoreText(appointment);
-    const scoreHtml = score ? `<span class="schedule-card__score">${score}</span>` : '';
+    const finished = !!appointment?.is_finished;
+    let centerMain;
+    if (score) {
+      centerMain = `<div class="schedule-card__score">${score}</div>`;
+    } else if (finished) {
+      centerMain = `<div class="schedule-card__score schedule-card__score--pending">比分待补录</div>`;
+    } else {
+      centerMain = `<div class="schedule-card__vs">VS</div>`;
+    }
+
     return `
     <div class="schedule-card ${appointment?.is_finished ? 'schedule-card--finished' : ''}" role="button" tabindex="0" data-match-index="${i}" data-schedule-status="${status}" data-team-search="${sanitize(`${p.a || ''} ${p.b || ''}`)}" aria-label="查看 ${sanitize(p.a || '轮空')} 对阵 ${sanitize(p.b || '轮空')} 详情">
       ${scheduleSideHtml(p.a, logoMap, nameMap)}
       <div class="schedule-card__center">
         <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
-        ${scoreHtml}
+        ${centerMain}
         ${appointmentTime}
-        <div class="schedule-card__vs">VS</div>
         ${appointmentStaff}
       </div>
       ${scheduleSideHtml(p.b, logoMap, nameMap)}

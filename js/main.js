@@ -7,7 +7,7 @@ import {
   initContent,
   loadAnnouncements, loadTeams, loadSchedule,
   loadHistory, loadThanks, loadStaff
-} from './content.js?v=20261002-03';
+} from './content.js?v=20261003-06';
 import { initAuth, setAuthChangeCallback } from './auth.js';
 import { initTools, renderToolsPanel } from './tools.js';
 
@@ -45,11 +45,9 @@ setAuthChangeCallback(() => {
 
 /* 初始化 */
 initUI();
-initContent();   /* 只加载主页需要的公告 + Q&A */
+initContent();
 initAuth();
 initTools();
 
-/* 若初始 hash 落在其他 tab，补一次懒加载（initUI 中 activate 已触发过回调，
-   但这里作为兜底，防止时序问题） */
 const initialTab = (location.hash.replace('#', '') || 'home');
 ensureTabLoaded(initialTab);
