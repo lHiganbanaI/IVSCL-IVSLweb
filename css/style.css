@@ -52,7 +52,7 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .account-btn__role[data-role="admin"]{background:rgba(212,180,122,.22);border-color:rgba(212,180,122,.5);color:var(--gold-lt)}
 .account-btn__role[data-role="team"]{background:rgba(120,220,200,.18);border-color:rgba(120,220,200,.45);color:var(--cyan-lt)}
 .account-btn__role[data-role="judge"]{background:rgba(166,139,212,.18);border-color:rgba(166,139,212,.45);color:var(--purple-lt)}
-.account-btn__role[data-role="press"],.account-btn__role[data-role="fan"]{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:var(--muted)}
+.account-btn__role[data-role="commentator"],.account-btn__role[data-role="fan"]{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15);color:var(--muted)}
 
 .tabs{display:flex;gap:5px;background:rgba(255,255,255,.035);border:1px solid var(--line);padding:5px;border-radius:12px}
 .tab{appearance:none;border:0;background:transparent;color:var(--muted);font:inherit;font-size:14px;font-weight:700;padding:9px 22px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.22s;display:inline-flex;align-items:center;gap:6px}
@@ -250,11 +250,19 @@ main{flex:1;position:relative;z-index:1}
 .thanks-card__member:hover{border-color:var(--line-strong);background:rgba(212,180,122,.07);transform:translateX(3px)}
 .thanks-card__avatar{flex:0 0 auto;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:900;color:#0d1730;background:linear-gradient(135deg,var(--gold-lt),var(--gold-dk));letter-spacing:.5px;line-height:1}
 .thanks-card__name{font-size:13.5px;font-weight:800;color:#e2e9f5;letter-spacing:.3px;line-height:1.4;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.staff-empty{padding:10px 14px;color:var(--muted);font-size:13px}
 .thanks-card[data-category="合作"] .thanks-card__icon{background:linear-gradient(135deg,rgba(120,220,200,.22),rgba(126,240,208,.16));border-color:rgba(120,220,200,.4)}
 .thanks-card[data-category="合作"] .thanks-card__sub{color:var(--cyan-lt)}
 .thanks-card[data-category="合作"] .thanks-card__avatar{background:linear-gradient(135deg,var(--cyan-lt),var(--cyan))}
 
 .teams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:18px;padding:12px 0 6px}
+.team-card[hidden]{display:none}
+.list-controls{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025)}
+.list-controls__search,.list-controls__filter{display:flex;flex-direction:column;gap:6px;min-width:min(100%,220px);color:var(--gold-lt);font-size:11.5px;font-weight:900}
+.list-controls__search{flex:1}
+.list-controls__search input,.list-controls__filter select{width:100%;min-height:42px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#111d39;color:#fff;font:inherit;font-size:13px;outline:none}
+.list-controls__search input:focus,.list-controls__filter select:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,180,122,.1)}
+.list-controls__count{padding:0 4px 12px;color:var(--muted);font-size:12px;white-space:nowrap}
 .team-card{position:relative;background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:26px 18px 22px;text-align:center;transition:.28s cubic-bezier(.2,.9,.3,1);overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:14px}
 .team-card::before{content:"";position:absolute;top:0;left:22%;right:22%;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.5;transition:.28s}
 .team-card:hover{transform:translateY(-5px);border-color:var(--line-strong);box-shadow:0 26px 56px -30px rgba(212,180,122,.8)}
@@ -382,13 +390,46 @@ main{flex:1;position:relative;z-index:1}
 .schedule-board__head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
 .schedule-board__head h3{font-size:18px;font-weight:900;letter-spacing:.5px;background:linear-gradient(100deg,var(--gold-lt),var(--white) 55%,var(--purple-lt));-webkit-background-clip:text;background-clip:text;color:transparent}
 .schedule-board__count{font-size:11.5px;font-weight:900;letter-spacing:1.5px;padding:5px 14px;border-radius:999px;background:rgba(212,180,122,.1);border:1px solid rgba(212,180,122,.32);color:var(--gold-lt)}
-.schedule-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-.schedule-card{display:flex;align-items:center;gap:12px;padding:16px 14px;border-radius:16px;background:linear-gradient(135deg,rgba(212,180,122,.08),rgba(166,139,212,.06));border:1px solid var(--line);transition:.24s cubic-bezier(.2,.9,.3,1)}
+.schedule-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.schedule-card{width:100%;font:inherit;color:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:16px 14px;border-radius:16px;background:linear-gradient(135deg,rgba(212,180,122,.08),rgba(166,139,212,.06));border:1px solid var(--line);transition:.24s cubic-bezier(.2,.9,.3,1);cursor:pointer}
+.schedule-card[hidden]{display:none}
+.schedule-card:focus-visible{outline:2px solid var(--gold-lt);outline-offset:3px}
+.schedule-card__center{flex:0 0 clamp(82px,24%,110px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;min-width:0}
+.schedule-card__time{color:var(--gold-lt);font-size:11px;font-weight:800;line-height:1.35;overflow-wrap:anywhere}
+.schedule-card__state{padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);font-size:9px;font-weight:900;line-height:1.2;text-align:center}
+.schedule-card__state--scheduled{background:rgba(120,220,200,.12);color:var(--cyan-lt)}
+.schedule-card__state--finished{background:rgba(166,139,212,.14);color:var(--purple-lt)}
+.schedule-card__staff{color:var(--muted);font-size:9px;line-height:1.3;text-align:center;white-space:normal;overflow-wrap:anywhere}
+.schedule-controls{margin:0 0 14px;padding:10px 12px}
+.schedule-controls .list-controls__search,.schedule-controls .list-controls__filter{font-size:10.5px}
+.schedule-controls .list-controls__search input,.schedule-controls .list-controls__filter select{min-height:38px;font-size:12px}
+.schedule-card--finished{opacity:.72}
+.schedule-show-more{display:block;margin:18px auto 0}
+.appointment-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));align-items:end;gap:12px;margin:0 0 18px;padding:16px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025)}
+.appointment-form h4{grid-column:1/-1;color:var(--gold-lt);font-size:14px;margin:0}
+.appointment-form label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:12px}
+.appointment-form input,.appointment-form select{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#111d39;color:#fff;font:inherit}
+.appointment-form__message{font-size:12px;color:var(--gold-lt)}
+.match-signup-group{padding:14px 0;border-top:1px dashed var(--line);color:var(--muted);font-size:13px}
+.match-signup-group b{color:var(--gold-lt)}
+.match-signup-group ul{display:flex;flex-wrap:wrap;gap:8px 18px;margin:9px 0 0;padding-left:18px;color:#fff}
+.match-signup-group p{margin:8px 0 0}
+.match-detail-status{display:inline-flex;margin:2px 0 14px;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.07);color:var(--muted);font-size:11px;font-weight:900}
+.match-detail-status--scheduled{background:rgba(120,220,200,.12);color:var(--cyan-lt)}
+.match-detail-status--finished{background:rgba(166,139,212,.14);color:var(--purple-lt)}
+.match-detail-section{margin:10px 0 14px;padding:14px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}
+.match-detail-section h4{margin-bottom:9px;color:var(--gold-lt);font-size:12px;font-weight:900;letter-spacing:.6px}
+.match-detail-section .tool-modal__info{margin:6px 0;padding:8px 10px}
+.action-notice{position:fixed;z-index:1200;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));max-width:min(92vw,520px);padding:12px 18px;border:1px solid rgba(120,220,200,.42);border-radius:12px;background:#142b35;color:#c9fff0;font-size:13px;font-weight:800;box-shadow:0 14px 40px rgba(0,0,0,.42);opacity:0;pointer-events:none;transform:translate(-50%,12px);transition:.2s ease}
+.action-notice.is-visible{opacity:1;transform:translate(-50%,0)}
+.action-notice--error{background:#351b2b;border-color:rgba(255,110,130,.5);color:#ffd5dc}
 .schedule-card:hover{border-color:var(--line-strong);transform:translateY(-2px)}
 .schedule-card__side{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
 .schedule-card__logo{width:64px;height:64px;border-radius:50%;object-fit:contain;padding:6px;background:radial-gradient(circle at 50% 30%,rgba(212,180,122,.14),rgba(212,180,122,.03)),linear-gradient(180deg,#1c2d54,#152242);border:2px solid var(--line-strong);box-shadow:0 0 0 4px rgba(212,180,122,.07)}
 .schedule-card__name{font-size:12.5px;font-weight:800;letter-spacing:.3px;color:#fff;text-align:center;word-break:break-word;max-width:100%;line-height:1.45;overflow-wrap:anywhere}
 .schedule-card__vs{flex:0 0 auto;font-size:11px;font-weight:900;letter-spacing:1.5px;color:var(--gold)}
+.schedule-no-results{margin-top:12px;padding:20px;text-align:center;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px}
+.schedule-no-results[hidden]{display:none}
 
 /* 赛程管理弹窗 */
 .schedule-format-hint{font-size:12px;line-height:1.85;color:var(--muted);background:rgba(255,255,255,.03);border:1px dashed var(--line-strong);border-radius:10px;padding:10px 12px}
@@ -412,8 +453,23 @@ main{flex:1;position:relative;z-index:1}
 .player-row--coach{border-style:dashed;border-color:rgba(212,180,122,.35)}
 
 .room-list{list-style:none;display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;padding:2px}
-.room-card{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(166,139,212,.08),rgba(166,139,212,.02));border:1px solid rgba(166,139,212,.22);transition:.2s}
+.room-card{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;padding:14px 16px;border-radius:12px;background:linear-gradient(135deg,rgba(166,139,212,.08),rgba(166,139,212,.02));border:1px solid rgba(166,139,212,.22);transition:.2s}
 .room-card:hover{border-color:rgba(166,139,212,.42)}
+.room-card__match{display:flex;flex-direction:column;gap:6px;padding-top:8px;margin-top:4px;border-top:1px dashed var(--line)}
+.room-card__start{font-size:12px;color:var(--muted)}
+.room-card__start b{color:var(--gold-lt);font-weight:800}
+.room-card__vs{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}
+.room-card__vs b{color:#fff;font-weight:800}
+.room-card__vs em{font-style:normal;font-weight:900;color:var(--purple);font-size:11px;letter-spacing:1px}
+.room-card__home{font-style:normal;font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:2px 8px;border-radius:999px;background:rgba(212,180,122,.12);border:1px solid rgba(212,180,122,.35);color:var(--gold-lt);white-space:nowrap}
+.room-card__actions{flex:0 0 auto;display:flex;flex-direction:column;gap:8px}
+.room-card__view{appearance:none;border:1px solid rgba(212,180,122,.4);border-radius:8px;padding:7px 12px;font:inherit;font-size:11.5px;font-weight:800;color:var(--gold-lt);background:rgba(212,180,122,.1);cursor:pointer;white-space:nowrap;transition:.2s}
+.room-card__view:hover{background:rgba(212,180,122,.2)}
+.room-card__roster{flex:1 1 100%;min-width:0;padding-top:6px}
+.room-roster__cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.room-roster__col{min-width:0}
+.room-roster__title{font-size:12.5px;font-weight:900;letter-spacing:.5px;color:var(--purple);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+@media(max-width:640px){.room-roster__cols{grid-template-columns:1fr}}
 .room-card__code{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:88px;padding:10px 12px;border-radius:10px;background:linear-gradient(135deg,rgba(212,180,122,.16),rgba(166,139,212,.14));border:1px solid var(--line-strong)}
 .room-card__code em{font-style:normal;font-size:10px;font-weight:900;letter-spacing:1.4px;color:var(--gold-lt);margin-bottom:4px}
 .room-card__code b{font-size:16px;font-weight:900;color:#fff;letter-spacing:1px;font-variant-numeric:tabular-nums}
