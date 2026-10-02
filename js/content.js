@@ -592,14 +592,16 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     const judgeCount = (appointment?.signups || []).filter(signup => signup.role === 'judge').length;
     const commentatorCount = (appointment?.signups || []).filter(signup => signup.role === 'commentator').length;
     const status = appointment?.is_finished ? 'finished' : appointment ? 'scheduled' : 'unbooked';
+    const appointmentTime = appointment ? `<span class="schedule-card__time">${sanitize(formatMatchTime(appointment.start_time))}</span>` : '';
+    const appointmentStaff = appointment ? `<span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>` : '';
     return `
     <div class="schedule-card ${appointment?.is_finished ? 'schedule-card--finished' : ''}" role="button" tabindex="0" data-match-index="${i}" data-schedule-status="${status}" data-team-search="${sanitize(`${p.a || ''} ${p.b || ''}`)}" aria-label="查看 ${sanitize(p.a || '轮空')} 对阵 ${sanitize(p.b || '轮空')} 详情">
       ${scheduleSideHtml(p.a, logoMap, nameMap)}
       <div class="schedule-card__center">
         <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
-        <span class="schedule-card__time">${appointment?.start_time ? sanitize(formatMatchTime(appointment.start_time)) : '时间待定'}</span>
+        ${appointmentTime}
         <div class="schedule-card__vs">VS</div>
-        <span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>
+        ${appointmentStaff}
       </div>
       ${scheduleSideHtml(p.b, logoMap, nameMap)}
     </div>
@@ -644,9 +646,12 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
       card.dataset.filterMatch = matchesText && matchesStatus ? 'true' : 'false';
       return matchesText && matchesStatus;
     });
-    if (resultCount) resultCount.textContent = `${filtered.length} / ${cardsEls.length} 场对阵`;
+    const initialCount = 6;
+    const visibleCount = expanded ? filtered.length : Math.min(filtered.length, initialCount);
+    if (resultCount) resultCount.textContent = query || status !== 'all'
+      ? `匹配 ${filtered.length} 场 · 已显示 ${visibleCount} / ${cardsEls.length}`
+      : `已显示 ${visibleCount} / ${cardsEls.length} 场`;
     if (noResults) noResults.hidden = filtered.length > 0;
-    const initialCount = window.matchMedia('(max-width: 720px)').matches ? 2 : 4;
     filtered.forEach((card, index) => { card.hidden = !expanded && index >= initialCount; });
     cardsEls.filter(card => card.dataset.filterMatch !== 'true').forEach(card => { card.hidden = true; });
     showMoreButton.hidden = filtered.length <= initialCount;

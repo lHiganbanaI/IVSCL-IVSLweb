@@ -4,6 +4,32 @@
 ============================================================ */
 import inviteCodesData from '../data/invite-codes.json';
 
+/* 管理员数据看板使用的表白名单。表名和列名始终来自这里，避免把前端输入拼进 SQL。 */
+const DASHBOARD_TABLES = {
+  users: { label: '用户', primaryKey: 'id', columns: ['id', 'username', 'phone', 'role', 'created_at'], writable: false },
+  invite_codes: { label: '激活码', primaryKey: 'code', columns: ['code', 'role', 'label', 'used', 'used_by'], writable: false },
+  announcements: { label: '公告', primaryKey: 'id', columns: ['id', 'tag', 'tag_class', 'time', 'text', 'created_at'], writable: true },
+  teams: { label: '队伍', primaryKey: 'id', columns: ['id', 'name', 'short', 'logo', 'created_at'], writable: true },
+  rooms: { label: '比赛房间', primaryKey: 'id', columns: ['id', 'code', 'password', 'title', 'creator', 'created_at', 'start_time', 'team_a', 'team_b', 'home'], writable: true },
+  schedule: { label: '赛程', primaryKey: 'id', columns: ['id', 'title', 'matches', 'created_at'], writable: true },
+  team_profiles: { label: '队长学校绑定', primaryKey: 'phone', columns: ['phone', 'school', 'created_at'], writable: true },
+  players: { label: '选手名单', primaryKey: 'id', columns: ['id', 'school', 'name', 'uid', 'position', 'is_coach', 'created_at'], writable: true },
+  match_appointments: { label: '约赛记录', primaryKey: 'id', columns: ['id', 'schedule_id', 'match_index', 'team_a', 'team_b', 'start_time', 'notes', 'booked_by_school', 'is_finished', 'created_by_phone', 'created_by_name', 'created_at'], writable: true },
+  match_signups: { label: '工作人员报名', primaryKey: 'id', columns: ['id', 'appointment_id', 'role', 'user_phone', 'username', 'created_at'], writable: true }
+};
+
+function dashboardTablePayload(table, rows) {
+  const config = DASHBOARD_TABLES[table];
+  return {
+    name: table,
+    label: config.label,
+    primaryKey: config.primaryKey,
+    columns: config.columns,
+    writable: config.writable,
+    rows
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -12,7 +38,7 @@ export default {
 
     const corsHeaders = {
       'Access-Control-Allow-Origin': env.ALLOW_ORIGIN || '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
     };
@@ -674,6 +700,72 @@ export default {
       /* ============================================================
          数据看板聚合接口（仅管理员）
       ============================================================ */
+      if (path === '/api/database/tables' && method === 'GET') {
+        const user = await verifyToken(request, env);
+        if (!user || user.role !== 'admin') return json({ error: '无权访问' }, corsHeaders, 403);
+
+        const entries = await Promise.all(Object.keys(DASHBOARD_TABLES).map(async table => {
+          const config = DASHBOARD_TABLES[table];
+          const result = await env.DB.prepare(
+            `SELECT ${config.columns.join(', ')} FROM ${table} ORDER BY ${config.primaryKey} DESC LIMIT 200`
+          ).all();
+          return dashboardTablePayload(table, result.results || []);
+        }));
+        return json({ tables: entries, rowLimit: 200 }, corsHeaders);
+      }
+
+      const databaseRoute = path.match(/^\/api\/database\/tables\/([a-z_]+)\/rows(?:\/(.+))?$/);
+      if (databaseRoute) {
+        const user = await verifyToken(request, env);
+        if (!user || user.role !== 'admin') return json({ error: '无权访问' }, corsHeaders, 403);
+
+        const table = databaseRoute[1];
+        const rowKey = databaseRoute[2] ? decodeURIComponent(databaseRoute[2]) : null;
+        const config = DASHBOARD_TABLES[table];
+        if (!config) return json({ error: '不支持的数据表' }, corsHeaders, 404);
+        if (!config.writable) return json({ error: '此表仅供查看，不能直接修改' }, corsHeaders, 403);
+
+        if (method === 'POST' && !rowKey) {
+          const body = await request.json();
+          const values = body && body.values;
+          if (!values || typeof values !== 'object' || Array.isArray(values)) {
+            return json({ error: '请提交 values 对象' }, corsHeaders, 400);
+          }
+          const insertable = config.columns.filter(column => column !== 'created_at' && Object.prototype.hasOwnProperty.call(values, column));
+          if (config.columns.includes('created_at')) {
+            insertable.push('created_at');
+            values.created_at = new Date().toISOString();
+          }
+          if (!insertable.length) return json({ error: '没有可写入的字段' }, corsHeaders, 400);
+          const placeholders = insertable.map(() => '?').join(', ');
+          await env.DB.prepare(`INSERT INTO ${table} (${insertable.join(', ')}) VALUES (${placeholders})`)
+            .bind(...insertable.map(column => values[column])).run();
+          return json({ ok: true }, corsHeaders, 201);
+        }
+
+        if (method === 'PATCH' && rowKey) {
+          const body = await request.json();
+          const values = body && body.values;
+          if (!values || typeof values !== 'object' || Array.isArray(values)) {
+            return json({ error: '请提交 values 对象' }, corsHeaders, 400);
+          }
+          const editable = config.columns.filter(column => column !== config.primaryKey && column !== 'created_at' && Object.prototype.hasOwnProperty.call(values, column));
+          if (!editable.length) return json({ error: '没有可修改的字段' }, corsHeaders, 400);
+          const setClause = editable.map(column => `${column} = ?`).join(', ');
+          const result = await env.DB.prepare(`UPDATE ${table} SET ${setClause} WHERE ${config.primaryKey} = ?`)
+            .bind(...editable.map(column => values[column]), rowKey).run();
+          if (!result.meta.changes) return json({ error: '目标记录不存在' }, corsHeaders, 404);
+          return json({ ok: true }, corsHeaders);
+        }
+
+        if (method === 'DELETE' && rowKey) {
+          const result = await env.DB.prepare(`DELETE FROM ${table} WHERE ${config.primaryKey} = ?`).bind(rowKey).run();
+          if (!result.meta.changes) return json({ error: '目标记录不存在' }, corsHeaders, 404);
+          return json({ ok: true }, corsHeaders);
+        }
+        return json({ error: '不支持的操作' }, corsHeaders, 405);
+      }
+
       if (path === '/api/dashboard' && method === 'GET') {
         const user = await verifyToken(request, env);
         if (!user || user.role !== 'admin') {

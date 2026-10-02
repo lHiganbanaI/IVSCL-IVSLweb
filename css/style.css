@@ -391,6 +391,8 @@ main{flex:1;position:relative;z-index:1}
 .schedule-board__head h3{font-size:18px;font-weight:900;letter-spacing:.5px;background:linear-gradient(100deg,var(--gold-lt),var(--white) 55%,var(--purple-lt));-webkit-background-clip:text;background-clip:text;color:transparent}
 .schedule-board__count{font-size:11.5px;font-weight:900;letter-spacing:1.5px;padding:5px 14px;border-radius:999px;background:rgba(212,180,122,.1);border:1px solid rgba(212,180,122,.32);color:var(--gold-lt)}
 .schedule-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+/* 桌面端每行固定两场对阵，便于阅读学校全名和比赛安排。 */
+@media (min-width:721px){.schedule-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .schedule-card{width:100%;font:inherit;color:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:16px 14px;border-radius:16px;background:linear-gradient(135deg,rgba(212,180,122,.08),rgba(166,139,212,.06));border:1px solid var(--line);transition:.24s cubic-bezier(.2,.9,.3,1);cursor:pointer}
 .schedule-card[hidden]{display:none}
 .schedule-card:focus-visible{outline:2px solid var(--gold-lt);outline-offset:3px}
