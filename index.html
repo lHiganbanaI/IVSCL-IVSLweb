@@ -14,7 +14,7 @@
 
 <link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
 <link rel="apple-touch-icon" href="assets/loge/loge_IVSCL.jpg">
-<link rel="stylesheet" href="css/style.css?v=20261003-06">
+<link rel="stylesheet" href="css/style.css?v=20261003-12">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="IVSCL & IVSL 联合官网">
@@ -54,7 +54,7 @@
       <button class="tab is-active" data-tab="home" role="tab" aria-selected="true">主页</button>
       <button class="tab" data-tab="about" role="tab" aria-selected="false">赛事相关</button>
       <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
-      <button class="tab" data-tab="schedule" role="tab" aria-selected="false">比赛赛程</button>
+      <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
       <button class="tab" data-tab="tools" role="tab" aria-selected="false">网页功能</button>
     </nav>
   </div>
@@ -295,29 +295,44 @@
     <div class="wrap">
       <div class="page-head">
         <p class="eyebrow">TEAMS</p>
-        <h2>参赛队伍</h2>
-        <p class="sub">本届赛事参赛战队一览 · 名单持续更新中</p>
+        <h2>队伍信息</h2>
+        <p class="sub">本届赛事参赛战队一览 · 队长可创建自己的队伍</p>
       </div>
 
-      <div class="list-controls" role="search">
-        <label class="list-controls__search"><span>搜索队伍</span><input id="teamsSearch" type="search" placeholder="输入队伍名称或简称" autocomplete="off"></label>
-        <span class="list-controls__count" id="teamsResultCount" aria-live="polite"></span>
-      </div>
+      <div id="teamsMainView">
+        <div class="teams-toolbar">
+          <div class="teams-tabs" id="teamsTabs" role="tablist">
+            <button class="teams-tab is-active" data-teams-tab="all" type="button">所有队伍</button>
+            <button class="teams-tab" data-teams-tab="mine" type="button" hidden>我的队伍</button>
+          </div>
 
-      <div class="teams-grid" id="teamsGrid" aria-live="polite" aria-busy="true">
-        <div class="board__state" style="grid-column:1/-1">正在加载队伍信息…</div>
-      </div>
+          <div class="teams-search" id="teamsSearchBar" role="search">
+            <input id="teamsSearch" type="search" placeholder="输入队伍名称或简称" autocomplete="off">
+            <span class="teams-search__count" id="teamsResultCount" aria-live="polite"></span>
+          </div>
 
-      <div class="cta reveal">
-        <div class="cta__inner">
-          <h2 class="cta__title">想了解赛事历史与鸣谢名单？</h2>
-          <p class="cta__desc">历届冠亚军、工作人员与合作单位都在「赛事相关」页。</p>
-          <div class="hero__actions">
-            <button class="btn btn--primary" data-goto="about">前往赛事相关</button>
-            <button class="btn btn--ghost"   data-goto="home">返回主页</button>
+          <div id="teamsAdminActions"></div>
+        </div>
+
+        <div class="teams-grid" id="teamsGrid" aria-live="polite" aria-busy="true">
+          <div class="board__state" style="grid-column:1/-1">正在加载队伍信息…</div>
+        </div>
+
+        <div id="myTeamEmpty" hidden></div>
+
+        <div class="cta reveal">
+          <div class="cta__inner">
+            <h2 class="cta__title">想了解赛事历史与鸣谢名单？</h2>
+            <p class="cta__desc">历届冠亚军、工作人员与合作单位都在「赛事相关」页。</p>
+            <div class="hero__actions">
+              <button class="btn btn--primary" data-goto="about">前往赛事相关</button>
+              <button class="btn btn--ghost"   data-goto="home">返回主页</button>
+            </div>
           </div>
         </div>
       </div>
+
+      <section class="team-editor-panel" id="teamEditorPanel" hidden></section>
     </div>
   </section>
 
@@ -325,7 +340,7 @@
     <div class="wrap">
       <div class="page-head">
         <p class="eyebrow">SCHEDULE</p>
-        <h2>比赛赛程</h2>
+        <h2>赛程信息</h2>
         <p class="sub">查看比赛时间与对阵详情</p>
       </div>
 
@@ -399,7 +414,7 @@
         <div class="account-profile__info">
           <div class="account-profile__name" id="profileName">—</div>
           <div class="account-profile__phone" id="profilePhone">—</div>
-          <div class="account-profile__role" id="profileRole" data-role="fan">观众</div>
+          <div class="account-profile__role" id="profileRole" data-role="">—</div>
         </div>
       </div>
       <div class="account-profile__actions">
@@ -473,6 +488,6 @@
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261003-06"></script>
+<script type="module" src="js/main.js?v=20261003-12"></script>
 </body>
 </html>

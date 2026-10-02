@@ -246,6 +246,94 @@ export default {
         }
       }
 
+      /* ============================================================
+         队长创建/编辑自己的队伍（含上传 logo 与自动绑定）
+      ============================================================ */
+      if (path === '/api/team/create-school' && method === 'POST') {
+        const user = await verifyToken(request, env);
+        if (!user || (user.role !== 'team' && user.role !== 'admin')) {
+          return json({ error: '仅队长或管理员可以创建队伍' }, corsHeaders, 403);
+        }
+        const body = await request.json();
+        const cleanShort = String(body.short || '').trim().toLowerCase();
+        const cleanName  = String(body.name  || '').trim();
+        if (!cleanShort) return json({ error: '学校简称不能为空' }, corsHeaders, 400);
+        if (!cleanName)  return json({ error: '学校全称不能为空' }, corsHeaders, 400);
+        if (!/^[a-z0-9_-]{1,20}$/.test(cleanShort)) {
+          return json({ error: '简称只能包含字母、数字、下划线、连字符（1-20 位）' }, corsHeaders, 400);
+        }
+        if (cleanName.length > 30) {
+          return json({ error: '学校全称最长 30 个字符' }, corsHeaders, 400);
+        }
+
+        // 校验 logo
+        let logoValue = null;
+        if (body.logo) {
+          if (typeof body.logo !== 'string' || !body.logo.startsWith('data:image/')) {
+            return json({ error: '图片格式错误' }, corsHeaders, 400);
+          }
+          if (body.logo.length > 1.5 * 1024 * 1024) {
+            return json({ error: '图片过大，请压缩后重试' }, corsHeaders, 400);
+          }
+          logoValue = body.logo;
+        }
+
+        const existing = await env.DB.prepare(
+          'SELECT id, short FROM teams WHERE short = ?'
+        ).bind(cleanShort).first();
+
+        // team 角色已绑定到别的队伍 → 只能编辑自己的
+        if (user.role === 'team') {
+          const profile = await env.DB.prepare(
+            'SELECT school FROM team_profiles WHERE phone = ?'
+          ).bind(user.phone).first();
+
+          if (profile?.school && profile.school !== cleanShort) {
+            const targetTeam = await env.DB.prepare(
+              'SELECT id FROM teams WHERE short = ?'
+            ).bind(profile.school).first();
+            if (!targetTeam) {
+              return json({ error: '原绑定学校数据异常，请联系管理员' }, corsHeaders, 500);
+            }
+            if (logoValue) {
+              await env.DB.prepare('UPDATE teams SET name = ?, logo = ? WHERE id = ?')
+                .bind(cleanName, logoValue, targetTeam.id).run();
+            } else {
+              await env.DB.prepare('UPDATE teams SET name = ? WHERE id = ?')
+                .bind(cleanName, targetTeam.id).run();
+            }
+            return json({ ok: true, school: profile.school, action: 'updated' }, corsHeaders);
+          }
+        }
+
+        if (existing) {
+          if (user.role !== 'admin') {
+            return json({ error: '该简称已被其他队伍占用' }, corsHeaders, 400);
+          }
+          if (logoValue) {
+            await env.DB.prepare('UPDATE teams SET name = ?, logo = ? WHERE id = ?')
+              .bind(cleanName, logoValue, existing.id).run();
+          } else {
+            await env.DB.prepare('UPDATE teams SET name = ? WHERE id = ?')
+              .bind(cleanName, existing.id).run();
+          }
+        } else {
+          await env.DB.prepare(
+            'INSERT INTO teams (name, short, logo, created_at) VALUES (?, ?, ?, ?)'
+          ).bind(cleanName, cleanShort, logoValue, new Date().toISOString()).run();
+        }
+
+        // team 角色自动绑定到自己创建的队伍
+        if (user.role === 'team') {
+          await env.DB.prepare(
+            'INSERT INTO team_profiles (phone, school, created_at) VALUES (?, ?, ?) ' +
+            'ON CONFLICT(phone) DO UPDATE SET school = excluded.school'
+          ).bind(user.phone, cleanShort, new Date().toISOString()).run();
+        }
+
+        return json({ ok: true, school: cleanShort, action: existing ? 'updated' : 'created' }, corsHeaders);
+      }
+
       if (path === '/api/team-logos' && method === 'GET') {
         const result = await env.DB.prepare(
           'SELECT short, logo FROM teams WHERE logo IS NOT NULL AND logo != ? ORDER BY id ASC'
@@ -541,7 +629,6 @@ export default {
 
         const appointmentId = Number(statusPath[1]);
 
-        /* ====== 恢复为未完赛：清空比分 ====== */
         if (!body.is_finished) {
           const update = await env.DB.prepare(
             'UPDATE match_appointments SET is_finished = 0, score_a = NULL, score_b = NULL, rounds = NULL WHERE id = ?'
@@ -550,7 +637,6 @@ export default {
           return json({ ok: true, is_finished: false }, corsHeaders);
         }
 
-        /* ====== 标记为完赛：校验每局上半/下半场比分 ====== */
         const roundsInput = body.rounds;
         if (!Array.isArray(roundsInput) || !roundsInput.length) {
           return json({ error: '请至少提交一局小比分' }, corsHeaders, 400);
@@ -642,9 +728,9 @@ export default {
           return json({ error: '无权访问' }, corsHeaders, 403);
         }
         if (user.role === 'admin') {
-          const url = new URL(request.url);
-          const phone = url.searchParams.get('phone');
-          const school = url.searchParams.get('school');
+          const url2 = new URL(request.url);
+          const phone = url2.searchParams.get('phone');
+          const school = url2.searchParams.get('school');
           if (school) {
             const p = await env.DB.prepare('SELECT * FROM team_profiles WHERE school = ?').bind(school).first();
             return json({ profile: p || null }, corsHeaders);
@@ -695,11 +781,11 @@ export default {
         await env.DB.batch([
           env.DB.prepare('DELETE FROM players WHERE school = ?').bind(school),
           ...players.map(p => env.DB.prepare(
-            'INSERT INTO players (school, name, uid, position, is_coach, created_at) VALUES (?, ?, ?, ?, 0, ?)'
-          ).bind(school, String(p.name).trim(), String(p.uid).trim(), p.position, now)),
+            'INSERT INTO players (school, name, cn_short, uid, position, is_coach, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+          ).bind(school, String(p.name).trim(), String(p.cn_short || '').trim() || null, String(p.uid).trim(), p.position, now)),
           ...(coachName ? [env.DB.prepare(
-            'INSERT INTO players (school, name, uid, position, is_coach, created_at) VALUES (?, ?, ?, ?, 1, ?)'
-          ).bind(school, coachName, null, null, now)] : [])
+            'INSERT INTO players (school, name, cn_short, uid, position, is_coach, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)'
+          ).bind(school, coachName, null, null, null, now)] : [])
         ]);
 
         return json({ ok: true, school, players: players.length, coach: coachName || null }, corsHeaders);
@@ -711,8 +797,8 @@ export default {
           return json({ error: '无权访问' }, corsHeaders, 403);
         }
 
-        const url = new URL(request.url);
-        let school = url.searchParams.get('school');
+        const url2 = new URL(request.url);
+        let school = url2.searchParams.get('school');
         if (!school) {
           if (user.role === 'admin') {
             const all = await env.DB.prepare('SELECT * FROM players ORDER BY school, is_coach, id').all();

@@ -1506,8 +1506,15 @@ function renderPlayersList(list, school) {
       ${players.map(p => `
         <li class="tool-list__item">
           <div class="tool-list__body">
-            <div class="tool-list__title">${sanitize(p.name)} <span class="msg__tag">${sanitize(p.position || '')}</span></div>
-            <div class="tool-list__meta"><span>UID ${sanitize(p.uid || '—')}</span>${school ? '' : '<span>🏫 ' + sanitize(p.school) + '</span>'}</div>
+            <div class="tool-list__title">
+              ${sanitize(p.name)}
+              ${p.cn_short ? `<span style="color:var(--muted);font-weight:700">（${sanitize(p.cn_short)}）</span>` : ''}
+              <span class="msg__tag">${sanitize(p.position || '')}</span>
+            </div>
+            <div class="tool-list__meta">
+              <span>🎮 ID ${sanitize(p.uid || '—')}</span>
+              ${school ? '' : '<span>🏫 ' + sanitize(p.school) + '</span>'}
+            </div>
           </div>
         </li>
       `).join('')}

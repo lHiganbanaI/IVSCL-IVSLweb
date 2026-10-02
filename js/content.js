@@ -1,5 +1,5 @@
 /* ============================================================
-   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分
+   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分、队长管理选手
 ============================================================ */
 
 import { apiRequest, getCurrentUser } from './api.js';
@@ -163,24 +163,33 @@ export async function loadQAs() {
 /* ============================================================
    队伍信息
 ============================================================ */
-export function renderTeams(list, container) {
+let __teamsListCache = [];
+let __mySchool = null;
+let __myTeamInfo = null;
+let __currentTeamsTab = 'all';
+let __teamsTabsBound = false;
+
+export function renderTeams(list, container, opts = {}) {
+  const editMode = opts.editMode === true;
+
   if (!list || !list.length) {
-    container.innerHTML = '<div class="board__state">暂无队伍信息</div>';
+    container.innerHTML = '<div class="board__state" style="grid-column:1/-1">暂无队伍信息</div>';
     const count = document.getElementById('teamsResultCount');
     if (count) count.textContent = '共 0 支队伍';
     container.setAttribute('aria-busy', 'false');
     return;
   }
+
   container.innerHTML = list.map(item => {
     const name  = sanitize(item.name  || '');
     const short = sanitize(item.short || '');
-
     const logoSrc = item.logo
       ? item.logo
       : `${TEAM_LOGO_DIR}loge_${short}${TEAM_LOGO_EXT}`;
 
     return `
       <div class="team-card" data-team-card-short="${short}">
+        ${editMode ? `<button class="team-card__edit" data-team-edit="${short}" type="button" aria-label="编辑队员">✏️ 编辑队员</button>` : ''}
         <div class="team-card__logo-wrap">
           <img class="team-card__logo" src="${logoSrc}" alt="${name} logo" loading="lazy"
             onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23182242%22 stroke=%22%23d4b47a%22 stroke-width=%222%22 stroke-dasharray=%226 6%22/><text x=%2250%22 y=%2264%22 font-size=%2240%22 font-weight=%22900%22 fill=%22%23d4b47a%22 text-anchor=%22middle%22 font-family=%22sans-serif%22>?</text></svg>'">
@@ -190,6 +199,7 @@ export function renderTeams(list, container) {
       </div>
     `;
   }).join('');
+
   const search = document.getElementById('teamsSearch');
   const count = document.getElementById('teamsResultCount');
   const applyTeamSearch = () => {
@@ -201,25 +211,148 @@ export function renderTeams(list, container) {
       card.hidden = !visible;
       if (visible) visibleCount++;
     });
-    if (count) count.textContent = query ? `匹配 ${visibleCount} / ${cards.length} 支` : `共 ${cards.length} 支队伍`;
+    if (count) count.textContent = query
+      ? `匹配 ${visibleCount} / ${cards.length} 支`
+      : `共 ${cards.length} 支队伍`;
   };
   if (search && !search.dataset.bound) {
     search.addEventListener('input', applyTeamSearch);
     search.dataset.bound = 'true';
   }
   applyTeamSearch();
+
+  if (editMode) {
+    container.querySelectorAll('[data-team-edit]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        openPlayerEditorPanel(btn.dataset.teamEdit);
+      });
+    });
+  }
+
   container.setAttribute('aria-busy', 'false');
+}
+
+/* 拉取队长绑定的学校 */
+async function refreshMySchool() {
+  const user = getCurrentUser();
+  __mySchool = null;
+  __myTeamInfo = null;
+  if (user?.role === 'team') {
+    try {
+      const d = await apiRequest('/api/team/school').catch(() => ({}));
+      __mySchool = d.profile?.school || null;
+    } catch {}
+    if (__mySchool) {
+      try {
+        const td = await apiRequest('/api/teams').catch(() => ({}));
+        const found = (td.teams || []).find(t => t.short === __mySchool);
+        if (found) __myTeamInfo = found;
+      } catch {}
+    }
+  }
+}
+
+/* 更新顶部标签 + 管理员操作区 */
+function updateTeamsChrome() {
+  const user = getCurrentUser();
+  const mineTab = document.querySelector('[data-teams-tab="mine"]');
+  const adminActions = document.getElementById('teamsAdminActions');
+
+  if (mineTab) mineTab.hidden = !(user?.role === 'team');
+
+  if (adminActions) {
+    if (user?.role === 'admin') {
+      adminActions.innerHTML = `<button class="btn btn--ghost btn--sm" id="adminManageTeamsBtn" type="button">🛡️ 管理队伍</button>`;
+      const btn = document.getElementById('adminManageTeamsBtn');
+      btn?.addEventListener('click', () => {
+        document.querySelector('.tab[data-tab="tools"]')?.click();
+        setTimeout(() => document.querySelector('[data-tool-id="teams"]')?.click(), 200);
+      });
+    } else {
+      adminActions.innerHTML = '';
+    }
+  }
+
+  if (__currentTeamsTab === 'mine' && user?.role !== 'team') {
+    __currentTeamsTab = 'all';
+    document.querySelectorAll('[data-teams-tab]').forEach(b => {
+      b.classList.toggle('is-active', b.dataset.teamsTab === 'all');
+    });
+  }
+}
+
+function bindTeamsTabs() {
+  if (__teamsTabsBound) return;
+  __teamsTabsBound = true;
+  document.querySelectorAll('[data-teams-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      __currentTeamsTab = btn.dataset.teamsTab;
+      document.querySelectorAll('[data-teams-tab]').forEach(b => {
+        b.classList.toggle('is-active', b === btn);
+      });
+      renderTeamsByTab();
+    });
+  });
+}
+
+function renderTeamsByTab() {
+  const grid = document.getElementById('teamsGrid');
+  const searchBar = document.getElementById('teamsSearchBar');
+  const mineEmpty = document.getElementById('myTeamEmpty');
+  if (!grid) return;
+
+  if (__currentTeamsTab === 'mine') {
+    if (searchBar) searchBar.hidden = true;
+
+    if (!__mySchool) {
+      grid.innerHTML = '';
+      grid.hidden = true;
+      if (mineEmpty) {
+        mineEmpty.hidden = false;
+        mineEmpty.innerHTML = `
+          <div class="board__state" style="border-style:dashed;padding:50px 20px">
+            <div style="font-size:15px;font-weight:900;color:#fff;margin-bottom:8px">你还没有创建队伍</div>
+            <div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">点击下方按钮上传学校信息、Logo 与选手名单</div>
+            <button class="btn btn--primary" id="createMyTeamBtn" type="button">🏫 创建我的队伍</button>
+          </div>
+        `;
+        document.getElementById('createMyTeamBtn')?.addEventListener('click', () => openTeamEditorPanel(null));
+      }
+      return;
+    }
+
+    if (mineEmpty) mineEmpty.hidden = true;
+    grid.hidden = false;
+    const mine = __teamsListCache.filter(t => t.short === __mySchool);
+    renderTeams(mine, grid, { editMode: true });
+  } else {
+    if (searchBar) searchBar.hidden = false;
+    if (mineEmpty) mineEmpty.hidden = true;
+    grid.hidden = false;
+    renderTeams(__teamsListCache, grid, { editMode: false });
+  }
 }
 
 export async function loadTeams() {
   const box = document.getElementById('teamsGrid');
   if (!box) return;
+
+  await refreshMySchool();
+  updateTeamsChrome();
+  bindTeamsTabs();
+
   try {
     const data = await fetchTeams();
-    renderTeams(data.teams || [], box);
+    __teamsListCache = data.teams || [];
+    renderTeamsByTab();
+
     fetchTeamLogos().then(result => {
       if (!box.isConnected) return;
       const logos = new Map((result.teams || []).map(team => [team.short, team.logo]));
+      __teamsListCache.forEach(t => {
+        if (logos.has(t.short)) t.logo = logos.get(t.short);
+      });
       box.querySelectorAll('[data-team-card-short]').forEach(card => {
         const logo = logos.get(card.dataset.teamCardShort);
         const img = card.querySelector('img');
@@ -228,9 +361,465 @@ export async function loadTeams() {
     }).catch(() => {});
   } catch (err) {
     console.warn('[队伍信息] 加载失败：', err.message);
+    box.hidden = false;
     box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
   }
   box.setAttribute('aria-busy', 'false');
+}
+
+/* ============================================================
+   内嵌队伍编辑面板 —— 打开 / 关闭
+============================================================ */
+function showTeamEditorPanel() {
+  const panel = document.getElementById('teamEditorPanel');
+  const mainView = document.getElementById('teamsMainView');
+  if (!panel || !mainView) return;
+  mainView.hidden = true;
+  panel.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeTeamEditorPanel() {
+  const panel = document.getElementById('teamEditorPanel');
+  const mainView = document.getElementById('teamsMainView');
+  if (!panel || !mainView) return;
+  panel.hidden = true;
+  panel.innerHTML = '';
+  mainView.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ============================================================
+   通用工具：图片压缩
+============================================================ */
+const PLAYER_POSITIONS = ['求生', '监管', '双边'];
+
+function compressImage(file, maxSize = 300, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) { reject(new Error('请选择图片文件')); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round(height * maxSize / width); width = maxSize;
+        } else if (height > maxSize) {
+          width = Math.round(width * maxSize / height); height = maxSize;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        resolve(canvas.toDataURL(outputType, quality));
+      };
+      img.onerror = () => reject(new Error('图片解析失败'));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ============================================================
+   选手行 HTML（4 列：游戏 ID / 游戏 CN / CN 简称 / 位置）
+============================================================ */
+function renderPlayerRowHtml(p, i, posOpts) {
+  return `
+    <div class="player-row" data-i="${i}">
+      <div class="player-row__head">
+        <span class="player-row__label">选手 ${i + 1}</span>
+        <button type="button" class="player-row__del" data-del="${i}" aria-label="删除">✕</button>
+      </div>
+      <div class="tool-form__row player-row__grid">
+        <div class="tool-field">
+          <label>游戏 ID</label>
+          <input type="text" class="pp-uid" maxlength="20" value="${sanitize(p.uid || '')}" placeholder="数字 ID" inputmode="numeric">
+        </div>
+        <div class="tool-field">
+          <label>游戏 CN</label>
+          <input type="text" class="pp-name" maxlength="20" value="${sanitize(p.name || '')}" placeholder="游戏内原名字">
+        </div>
+        <div class="tool-field">
+          <label>CN 简称</label>
+          <input type="text" class="pp-cnshort" maxlength="10" value="${sanitize(p.cn_short || '')}" placeholder="例如：阿轲">
+        </div>
+        <div class="tool-field">
+          <label>位置</label>
+          <select class="pp-pos">${posOpts}</select>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function coachRowHtml(coachName) {
+  return `
+    <div class="player-row player-row--coach">
+      <div class="player-row__head">
+        <span class="player-row__label">教练（无需游戏 ID）</span>
+      </div>
+      <div class="tool-form__row">
+        <div class="tool-field"><label>教练名字</label><input type="text" id="teCoachName" maxlength="20" value="${sanitize(coachName || '')}"></div>
+      </div>
+    </div>
+  `;
+}
+
+function collectPlayersFromPanel(panel) {
+  return [...panel.querySelectorAll('.player-row:not(.player-row--coach)')].map(row => ({
+    name:     (row.querySelector('.pp-name')?.value || '').trim(),
+    cn_short: (row.querySelector('.pp-cnshort')?.value || '').trim(),
+    uid:      (row.querySelector('.pp-uid')?.value || '').trim(),
+    position: row.querySelector('.pp-pos')?.value || '求生'
+  }));
+}
+
+/* ============================================================
+   ① 创建队伍：内嵌面板（学校信息 + 选手）
+============================================================ */
+let __createState = { pendingLogo: null };
+
+async function openTeamEditorPanel(school) {
+  const panel = document.getElementById('teamEditorPanel');
+  if (!panel) return;
+
+  __createState.pendingLogo = null;
+
+  let players = [];
+  let coachName = '';
+  if (school) {
+    try {
+      const pd = await apiRequest('/api/team/players');
+      const list = pd.players || [];
+      players = list.filter(x => !x.is_coach).map(x => ({
+        name: x.name, cn_short: x.cn_short || '', uid: x.uid || '', position: x.position || '求生'
+      }));
+      const c = list.find(x => x.is_coach);
+      coachName = c ? c.name : '';
+    } catch {}
+  }
+  if (!players.length) {
+    players = [
+      { name:'', cn_short:'', uid:'', position:'求生' }, { name:'', cn_short:'', uid:'', position:'求生' },
+      { name:'', cn_short:'', uid:'', position:'求生' }, { name:'', cn_short:'', uid:'', position:'求生' },
+      { name:'', cn_short:'', uid:'', position:'监管' }
+    ];
+  }
+  const posOpts = PLAYER_POSITIONS.map(v => `<option value="${v}">${v}</option>`).join('');
+
+  panel.innerHTML = `
+    <div class="team-editor-card">
+      <div class="team-editor-card__head">
+        <h3 class="team-editor-card__title">创建我的队伍 <em>TEAM</em></h3>
+        <button class="btn btn--ghost btn--sm team-editor-card__back" id="teBackBtn" type="button">← 返回队伍列表</button>
+      </div>
+      <p class="tool-modal__sub">填写学校信息、上传 Logo 并录入选手名单，保存后立即展示在队伍信息页。</p>
+
+      <section class="tool-modal__section">
+        <div class="tool-modal__section-head"><h4>学校信息</h4></div>
+        <div class="tool-form">
+          <div class="tool-form__row">
+            <div class="tool-field">
+              <label for="teName">学校 / 战队全称</label>
+              <input type="text" id="teName" maxlength="30" placeholder="例如：北京建筑大学">
+            </div>
+            <div class="tool-field">
+              <label for="teShort">学校简称（英文/拼音）</label>
+              <input type="text" id="teShort" maxlength="20" placeholder="例如：bjjz">
+            </div>
+          </div>
+          <div class="tool-field">
+            <label for="teLogo">学校 Logo（建议方形，自动压缩到 300px）</label>
+            <input type="file" id="teLogo" accept="image/*">
+          </div>
+          <div class="team-logo-preview" id="teLogoPreview" hidden>
+            <div class="team-logo-preview__img" id="teLogoPreviewImg"></div>
+            <div class="team-logo-preview__info">
+              <b>预览</b>
+              <span id="teLogoInfo">—</span>
+            </div>
+            <button class="team-logo-preview__clear" id="teLogoClear" type="button" aria-label="清除">✕</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tool-modal__section">
+        <div class="tool-modal__section-head">
+          <h4>选手名单</h4>
+          <span class="tool-modal__count">可多行添加</span>
+        </div>
+        <div id="tePlayersArea">
+          ${players.map((p, i) => renderPlayerRowHtml(p, i, posOpts)).join('')}
+          ${coachRowHtml(coachName)}
+        </div>
+        <div class="tool-actions">
+          <button class="btn btn--ghost btn--sm" id="teAddPlayer" type="button">+ 添加选手</button>
+        </div>
+      </section>
+
+      <div class="tool-actions">
+        <button class="btn btn--primary btn--sm" id="teSaveBtn" type="button">💾 保存</button>
+        <button class="btn btn--ghost btn--sm" id="teCancelBtn" type="button">取消</button>
+        <span class="appointment-form__message" id="teMessage" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+  `;
+
+  showTeamEditorPanel();
+
+  panel.querySelectorAll('.pp-pos').forEach((sel, i) => { if (players[i]) sel.value = players[i].position || '求生'; });
+
+  const fileInput = panel.querySelector('#teLogo');
+  const preview = panel.querySelector('#teLogoPreview');
+  const previewImg = panel.querySelector('#teLogoPreviewImg');
+  const previewInfo = panel.querySelector('#teLogoInfo');
+
+  fileInput?.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) { __createState.pendingLogo = null; return; }
+    if (file.size > 5 * 1024 * 1024) { alert('图片过大（超过 5MB）'); fileInput.value = ''; return; }
+    try {
+      const dataUrl = await compressImage(file, 300, 0.78);
+      __createState.pendingLogo = dataUrl;
+      if (previewImg) previewImg.style.backgroundImage = `url(${dataUrl})`;
+      if (previewInfo) previewInfo.textContent = `已选择 ${file.name}（压缩后 ${Math.round(dataUrl.length/1024)} KB）`;
+      if (preview) preview.hidden = false;
+    } catch (err) {
+      alert('图片处理失败：' + err.message);
+      fileInput.value = '';
+    }
+  });
+
+  panel.querySelector('#teLogoClear')?.addEventListener('click', () => {
+    __createState.pendingLogo = null;
+    if (fileInput) fileInput.value = '';
+    if (previewImg) previewImg.style.backgroundImage = '';
+    if (preview) preview.hidden = true;
+  });
+
+  const rebuild = (list) => {
+    const area = panel.querySelector('#tePlayersArea');
+    const curCoach = panel.querySelector('#teCoachName')?.value || '';
+    area.innerHTML = list.map((p, i) => renderPlayerRowHtml(p, i, posOpts)).join('') + coachRowHtml(curCoach);
+    area.querySelectorAll('.pp-pos').forEach((sel, i) => { if (list[i]) sel.value = list[i].position || '求生'; });
+    bindDelete();
+  };
+
+  const bindDelete = () => {
+    panel.querySelectorAll('.player-row__del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cur = collectPlayersFromPanel(panel);
+        cur.splice(Number(btn.dataset.del), 1);
+        rebuild(cur);
+      });
+    });
+  };
+  bindDelete();
+
+  panel.querySelector('#teAddPlayer')?.addEventListener('click', () => {
+    const cur = collectPlayersFromPanel(panel);
+    cur.push({ name: '', cn_short: '', uid: '', position: '求生' });
+    rebuild(cur);
+  });
+
+  panel.querySelector('#teBackBtn')?.addEventListener('click', () => closeTeamEditorPanel());
+  panel.querySelector('#teCancelBtn')?.addEventListener('click', () => closeTeamEditorPanel());
+
+  panel.querySelector('#teSaveBtn')?.addEventListener('click', async () => {
+    const name = (panel.querySelector('#teName').value || '').trim();
+    const short = (panel.querySelector('#teShort').value || '').trim().toLowerCase();
+    if (!name) { showActionNotice('请填写学校全称', true); return; }
+    if (!short) { showActionNotice('请填写学校简称', true); return; }
+    if (!/^[a-z0-9_-]{1,20}$/.test(short)) {
+      showActionNotice('简称只能是字母、数字、下划线、连字符', true); return;
+    }
+    const rows = collectPlayersFromPanel(panel).filter(r => r.name || r.uid || r.cn_short);
+    for (const r of rows) {
+      if (!r.name) { showActionNotice('选手名字（游戏 CN）不能为空', true); return; }
+      if (!r.uid) { showActionNotice('选手游戏 ID 不能为空', true); return; }
+    }
+
+    const saveBtn = panel.querySelector('#teSaveBtn');
+    const originalText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    const msg = panel.querySelector('#teMessage');
+
+    try {
+      const logoPayload = __createState.pendingLogo || null;
+
+      await apiRequest('/api/team/create-school', {
+        method: 'POST',
+        body: JSON.stringify({ name, short, logo: logoPayload })
+      });
+
+      const coachName = (panel.querySelector('#teCoachName')?.value || '').trim();
+      if (rows.length || coachName) {
+        await apiRequest('/api/team/players', {
+          method: 'POST',
+          body: JSON.stringify({
+            players: rows,
+            coach: coachName ? { name: coachName } : null
+          })
+        });
+      }
+
+      showActionNotice('队伍已创建');
+      closeTeamEditorPanel();
+      invalidateTeams();
+      await loadTeams();
+      if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
+    } catch (err) {
+      if (msg) msg.textContent = err.message;
+      showActionNotice(err.message, true);
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
+  });
+}
+
+/* ============================================================
+   ② 编辑选手：内嵌面板（学校信息只读，只改队员）
+============================================================ */
+async function openPlayerEditorPanel(school) {
+  const panel = document.getElementById('teamEditorPanel');
+  if (!panel) return;
+
+  const schoolInfo = __teamsListCache.find(t => t.short === school) || __myTeamInfo || {};
+  const schoolName = schoolInfo.name || school;
+  const schoolShort = schoolInfo.short || school;
+  const schoolLogo = schoolInfo.logo || '';
+
+  let players = [];
+  let coachName = '';
+  try {
+    const pd = await apiRequest('/api/team/players');
+    const list = pd.players || [];
+    players = list.filter(x => !x.is_coach).map(x => ({
+      name: x.name, cn_short: x.cn_short || '', uid: x.uid || '', position: x.position || '求生'
+    }));
+    const c = list.find(x => x.is_coach);
+    coachName = c ? c.name : '';
+  } catch {}
+
+  if (!players.length) {
+    players = [
+      { name:'', cn_short:'', uid:'', position:'求生' }, { name:'', cn_short:'', uid:'', position:'求生' },
+      { name:'', cn_short:'', uid:'', position:'求生' }, { name:'', cn_short:'', uid:'', position:'求生' },
+      { name:'', cn_short:'', uid:'', position:'监管' }
+    ];
+  }
+  const posOpts = PLAYER_POSITIONS.map(v => `<option value="${v}">${v}</option>`).join('');
+
+  panel.innerHTML = `
+    <div class="team-editor-card">
+      <div class="team-editor-card__head">
+        <h3 class="team-editor-card__title">编辑队伍选手 <em>TEAM</em></h3>
+        <button class="btn btn--ghost btn--sm team-editor-card__back" id="teBackBtn" type="button">← 返回队伍列表</button>
+      </div>
+      <p class="tool-modal__sub">学校信息已绑定，只需维护选手名单即可。</p>
+
+      <section class="tool-modal__section">
+        <div class="tool-modal__section-head"><h4>学校信息（已绑定）</h4></div>
+        <div class="school-readonly">
+          ${schoolLogo ? `<img class="school-readonly__logo" src="${schoolLogo}" alt="${sanitize(schoolName)} logo">` : `<div class="school-readonly__logo school-readonly__logo--empty">?</div>`}
+          <div class="school-readonly__info">
+            <div class="school-readonly__name">${sanitize(schoolName)}</div>
+            <div class="school-readonly__short">${sanitize(schoolShort)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tool-modal__section">
+        <div class="tool-modal__section-head">
+          <h4>选手名单</h4>
+          <span class="tool-modal__count">可多行添加</span>
+        </div>
+        <div id="tePlayersArea">
+          ${players.map((p, i) => renderPlayerRowHtml(p, i, posOpts)).join('')}
+          ${coachRowHtml(coachName)}
+        </div>
+        <div class="tool-actions">
+          <button class="btn btn--ghost btn--sm" id="teAddPlayer" type="button">+ 添加选手</button>
+        </div>
+      </section>
+
+      <div class="tool-actions">
+        <button class="btn btn--primary btn--sm" id="teSaveBtn" type="button">💾 保存名单</button>
+        <button class="btn btn--ghost btn--sm" id="teCancelBtn" type="button">取消</button>
+        <span class="appointment-form__message" id="teMessage" role="status" aria-live="polite"></span>
+      </div>
+    </div>
+  `;
+
+  showTeamEditorPanel();
+
+  panel.querySelectorAll('.pp-pos').forEach((sel, i) => { if (players[i]) sel.value = players[i].position || '求生'; });
+
+  const rebuild = (list) => {
+    const area = panel.querySelector('#tePlayersArea');
+    const curCoach = panel.querySelector('#teCoachName')?.value || '';
+    area.innerHTML = list.map((p, i) => renderPlayerRowHtml(p, i, posOpts)).join('') + coachRowHtml(curCoach);
+    area.querySelectorAll('.pp-pos').forEach((sel, i) => { if (list[i]) sel.value = list[i].position || '求生'; });
+    bindDelete();
+  };
+
+  const bindDelete = () => {
+    panel.querySelectorAll('.player-row__del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cur = collectPlayersFromPanel(panel);
+        cur.splice(Number(btn.dataset.del), 1);
+        rebuild(cur);
+      });
+    });
+  };
+  bindDelete();
+
+  panel.querySelector('#teAddPlayer')?.addEventListener('click', () => {
+    const cur = collectPlayersFromPanel(panel);
+    cur.push({ name: '', cn_short: '', uid: '', position: '求生' });
+    rebuild(cur);
+  });
+
+  panel.querySelector('#teBackBtn')?.addEventListener('click', () => closeTeamEditorPanel());
+  panel.querySelector('#teCancelBtn')?.addEventListener('click', () => closeTeamEditorPanel());
+
+  panel.querySelector('#teSaveBtn')?.addEventListener('click', async () => {
+    const rows = collectPlayersFromPanel(panel).filter(r => r.name || r.uid || r.cn_short);
+    for (const r of rows) {
+      if (!r.name) { showActionNotice('选手名字（游戏 CN）不能为空', true); return; }
+      if (!r.uid) { showActionNotice('选手游戏 ID 不能为空', true); return; }
+    }
+    const coachName = (panel.querySelector('#teCoachName')?.value || '').trim();
+    if (!rows.length && !coachName) { showActionNotice('请至少添加一名选手或教练', true); return; }
+
+    const saveBtn = panel.querySelector('#teSaveBtn');
+    const originalText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    const msg = panel.querySelector('#teMessage');
+
+    try {
+      await apiRequest('/api/team/players', {
+        method: 'POST',
+        body: JSON.stringify({
+          players: rows,
+          coach: coachName ? { name: coachName } : null
+        })
+      });
+      showActionNotice('名单已保存');
+      closeTeamEditorPanel();
+      invalidateTeams();
+      await loadTeams();
+    } catch (err) {
+      if (msg) msg.textContent = err.message;
+      showActionNotice(err.message, true);
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+    }
+  });
 }
 
 /* ============================================================
@@ -443,14 +1032,12 @@ function formatMatchTime(value) {
   return formatBeijing(value) || String(value);
 }
 
-/* 从 appointment 取大比分显示字符串 */
 function scoreText(appointment) {
   if (!appointment || !appointment.is_finished) return '';
   if (appointment.score_a == null || appointment.score_b == null) return '';
   return `${appointment.score_a} : ${appointment.score_b}`;
 }
 
-/* ====== 比分相关 ====== */
 function parseRounds(raw) {
   if (!raw) return [];
   let arr;
@@ -464,22 +1051,10 @@ function parseRounds(raw) {
       };
     }
     if (r && (r.a != null || r.b != null)) {
-      return {
-        first:  { a: Number(r.a) || 0, b: Number(r.b) || 0 },
-        second: { a: 0, b: 0 }
-      };
+      return { first:  { a: Number(r.a) || 0, b: Number(r.b) || 0 }, second: { a: 0, b: 0 } };
     }
     return { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } };
   });
-}
-
-function computeTotals(rounds) {
-  let a = 0, b = 0;
-  for (const r of rounds) {
-    a += (r.first?.a || 0) + (r.second?.a || 0);
-    b += (r.first?.b || 0) + (r.second?.b || 0);
-  }
-  return { a, b };
 }
 
 function roundRowHtml(round, index) {
@@ -528,10 +1103,7 @@ function bindRoundDelete(roundsBox) {
     if (!del || del.dataset.bound === 'true') return;
     del.dataset.bound = 'true';
     del.addEventListener('click', () => {
-      if (roundsBox.children.length <= 1) {
-        showActionNotice('至少保留一局', true);
-        return;
-      }
+      if (roundsBox.children.length <= 1) { showActionNotice('至少保留一局', true); return; }
       row.remove();
       [...roundsBox.children].forEach((r, i) => {
         r.dataset.roundIndex = i;
@@ -610,10 +1182,7 @@ function showMatchDetails(match, appointment) {
         <b class="match-score-display__num">${appointment.score_b}</b>
         <span class="match-score-display__side">${sanitize(teamBName)}</span>
       </div>
-      ${rounds.length ? `
-        <div class="match-score-display__rounds">
-          ${rounds.map((r, i) => roundDisplayHtml(r, i)).join('')}
-        </div>` : ''}
+      ${rounds.length ? `<div class="match-score-display__rounds">${rounds.map((r, i) => roundDisplayHtml(r, i)).join('')}</div>` : ''}
     </div>
   ` : '';
 
@@ -634,7 +1203,6 @@ function showMatchDetails(match, appointment) {
 
   const isJudge = user && ['judge', 'admin'].includes(user.role);
 
-  /* 表单默认局数：优先回填已存 rounds；没有则 3 局空数据 */
   const formDefaultRounds = rounds.length ? rounds : [
     { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
     { first: { a: 0, b: 0 }, second: { a: 0, b: 0 } },
@@ -702,7 +1270,6 @@ function showMatchDetails(match, appointment) {
   mask.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
 
-  /* 报名按钮 */
   content.querySelectorAll('.match-signup-button').forEach(signupButton => signupButton.addEventListener('click', async () => {
     const signupRole = signupButton.dataset.signupRole;
     const isSigned = mySignups.some(s => s.role === signupRole);
@@ -729,7 +1296,6 @@ function showMatchDetails(match, appointment) {
     }
   }));
 
-  /* 恢复为未完赛 */
   const finishBtn = content.querySelector('#matchFinishBtn');
   if (finishBtn) finishBtn.addEventListener('click', async () => {
     if (!confirm('确定要恢复为未完赛吗？已有的比分记录会被清空。')) return;
@@ -754,7 +1320,6 @@ function showMatchDetails(match, appointment) {
     }
   });
 
-  /* 展开比分表单 */
   const toggleBtn = content.querySelector('#matchFinishToggleBtn');
   const resultForm = content.querySelector('#matchResultForm');
   if (toggleBtn && resultForm) {
@@ -762,45 +1327,31 @@ function showMatchDetails(match, appointment) {
       resultForm.hidden = !resultForm.hidden;
       if (!resultForm.hidden) {
         const roundsBox = content.querySelector('#resultRounds');
-        if (roundsBox) {
-          bindRoundDelete(roundsBox);
-          bindRoundInputs(roundsBox, content);
-        }
+        if (roundsBox) { bindRoundDelete(roundsBox); bindRoundInputs(roundsBox, content); }
       }
     });
   }
 
   const roundsBox = content.querySelector('#resultRounds');
   const addRoundBtn = content.querySelector('#resultAddRound');
-  if (roundsBox) {
-    bindRoundDelete(roundsBox);
-    bindRoundInputs(roundsBox, content);
-  }
+  if (roundsBox) { bindRoundDelete(roundsBox); bindRoundInputs(roundsBox, content); }
   if (addRoundBtn && roundsBox) {
     addRoundBtn.addEventListener('click', () => {
       const idx = roundsBox.children.length;
       if (idx >= 9) { showActionNotice('最多 9 局', true); return; }
       roundsBox.insertAdjacentHTML('beforeend', roundRowHtml({ first: { a: 0, b: 0 }, second: { a: 0, b: 0 } }, idx));
-      bindRoundDelete(roundsBox);
-      bindRoundInputs(roundsBox, content);
+      bindRoundDelete(roundsBox); bindRoundInputs(roundsBox, content);
     });
   }
 
-  /* 提交比分 */
   const submitBtn = content.querySelector('#resultSubmitBtn');
   if (submitBtn) submitBtn.addEventListener('click', async () => {
     const roundRows = [...content.querySelectorAll('.match-result-round')];
     if (!roundRows.length) return showActionNotice('请至少填写一局小比分', true);
 
     const rounds = roundRows.map(row => ({
-      first: {
-        a: Number(row.querySelector('.mrr-first-a').value),
-        b: Number(row.querySelector('.mrr-first-b').value)
-      },
-      second: {
-        a: Number(row.querySelector('.mrr-second-a').value),
-        b: Number(row.querySelector('.mrr-second-b').value)
-      }
+      first:  { a: Number(row.querySelector('.mrr-first-a').value),  b: Number(row.querySelector('.mrr-first-b').value) },
+      second: { a: Number(row.querySelector('.mrr-second-a').value), b: Number(row.querySelector('.mrr-second-b').value) }
     }));
 
     for (let i = 0; i < rounds.length; i++) {
@@ -876,7 +1427,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     const appointmentTime = appointment ? `<span class="schedule-card__time">${sanitize(formatMatchTime(appointment.start_time))}</span>` : '';
     const appointmentStaff = appointment ? `<span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>` : '';
 
-    /* 中间区：比分 / 待补录 / VS */
     const score = scoreText(appointment);
     const finished = !!appointment?.is_finished;
     let centerMain;
@@ -955,9 +1505,7 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
   searchInput?.addEventListener('input', () => { expanded = false; updateScheduleFilters(); });
   statusFilter?.addEventListener('change', () => { expanded = false; updateScheduleFilters(); });
   if (scheduleResizeHandler) window.removeEventListener('resize', scheduleResizeHandler);
-  const updateVisibleCards = () => {
-    updateScheduleFilters();
-  };
+  const updateVisibleCards = () => { updateScheduleFilters(); };
   showMoreButton.addEventListener('click', () => { expanded = !expanded; updateScheduleFilters(); });
   scheduleResizeHandler = updateVisibleCards;
   window.addEventListener('resize', scheduleResizeHandler);
