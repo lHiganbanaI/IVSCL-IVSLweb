@@ -6,7 +6,10 @@ import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
 } from './config.js';
 import { apiRequest, getCurrentUser } from './api.js';
-import { sanitize, getInitialFromName } from './utils.js';
+import {
+  sanitize, getInitialFromName,
+  formatBeijing, beijingISOFromLocal, beijingLocalFromISO
+} from './utils.js';
 import { fetchTeams, invalidateTeams, showActionNotice } from './content.js';
 
 const teamSchoolCache = new Map();
@@ -671,9 +674,6 @@ function bindDrawEvents() {
 /* ============================================================
    比赛房间
 ============================================================ */
-/* ============================================================
-   比赛房间
-============================================================ */
 async function loadRoomsTool(box) {
   let list = [];
   try {
@@ -805,7 +805,8 @@ async function loadRoomsTool(box) {
     const code = (document.getElementById('roomCode').value || '').trim();
     const password = (document.getElementById('roomPassword').value || '').trim();
     const title = (document.getElementById('roomTitle').value || '').trim();
-    const start_time = document.getElementById('roomStart').value || '';
+    /* 统一转为带 +08:00 的 ISO 字符串，避免后端按 UTC 解析 */
+    const start_time = beijingISOFromLocal(document.getElementById('roomStart').value || '');
     const team_a = (document.getElementById('roomTeamA').value || '').trim();
     const team_b = (document.getElementById('roomTeamB').value || '').trim();
     const home = (document.getElementById('roomHome').value || 'A');
@@ -848,7 +849,12 @@ function renderRoomListBox(list, nameMap) {
     box.innerHTML = '<li class="tool-list__empty">暂无房间</li>';
   } else {
     const fullName = (short) => nameMap[short] ? nameMap[short] + '（' + short + '）' : (short || '—');
-    const fmtTime = (t) => { if (!t) return ''; const d = new Date(t); return isNaN(d) ? t : d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }); };
+    /* 统一按北京时间显示，输出 "MM-DD HH:mm" 紧凑样式 */
+    const fmtTime = (t) => {
+      if (!t) return '';
+      const s = formatBeijing(t);   // "2026-10-02 20:30"
+      return s ? s.slice(5) : String(t); // "10-02 20:30"
+    };
     const homeText = (r) => {
       if (!r.team_a || !r.team_b) return '';
       if (r.home === 'B') return fullName(r.team_b) + ' 主场';
@@ -1198,9 +1204,8 @@ async function loadMatchBookingTool(box) {
     const timeInput = box.querySelector('#bookingTime');
     const notesInput = box.querySelector('#bookingNotes');
     if (!appointment) { timeInput.value = ''; notesInput.value = ''; return; }
-    const date = new Date(appointment.start_time);
-    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-    timeInput.value = date.toISOString().slice(0, 16);
+    /* 回显：把存储的 ISO 时间转成北京时间，填入 datetime-local */
+    timeInput.value = beijingLocalFromISO(appointment.start_time);
     notesInput.value = appointment.notes || '';
   };
   matchSelect.addEventListener('change', syncFields);
@@ -1221,7 +1226,8 @@ async function loadMatchBookingTool(box) {
           schedule_id: schedule.id,
           match_index: Number(matchSelect.value),
           ...(isAdmin ? { booked_by_school: box.querySelector('#bookingSchool').value } : {}),
-          start_time: box.querySelector('#bookingTime').value,
+          /* 提交：把 datetime-local 值标上 +08:00，避免后端按 UTC 解析 */
+          start_time: beijingISOFromLocal(box.querySelector('#bookingTime').value),
           notes: box.querySelector('#bookingNotes').value
         })
       });

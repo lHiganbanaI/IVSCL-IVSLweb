@@ -3,7 +3,7 @@
 ============================================================ */
 
 import { apiRequest, getCurrentUser } from './api.js';
-import { sanitize, formatTime, getInitial } from './utils.js';
+import { sanitize, formatTime, getInitial, formatBeijing } from './utils.js';
 import {
   TEAM_LOGO_DIR, TEAM_LOGO_EXT,
   HISTORY_LOGO_DIR, HISTORY_LOGO_EXT,
@@ -440,10 +440,10 @@ function scheduleSideHtml(short, logoMap, nameMap) {
   `;
 }
 
+/* 统一使用北京时间显示比赛时间 */
 function formatMatchTime(value) {
   if (!value) return '';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('zh-CN', { dateStyle: 'medium', timeStyle: 'short' });
+  return formatBeijing(value) || String(value);
 }
 
 function ensureMatchDetailsModal() {
