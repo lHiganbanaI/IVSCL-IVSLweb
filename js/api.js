@@ -51,6 +51,7 @@ export function parseJwtPayload(token) {
     const json = new TextDecoder().decode(bytes);
     const payload = JSON.parse(json);
     if (payload.exp && payload.exp < Date.now()) return null;
+    if (payload.role === 'press') payload.role = 'commentator';
     return payload;
   } catch { return null; }
 }

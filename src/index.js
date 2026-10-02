@@ -115,6 +115,13 @@ export default {
          公告栏
       ============================================================ */
 
+      if (path === '/api/staff' && method === 'GET') {
+        const result = await env.DB.prepare(
+          "SELECT username, role FROM users WHERE role IN ('judge', 'commentator') ORDER BY role, username"
+        ).all();
+        return json({ staff: result.results || [] }, corsHeaders);
+      }
+
       if (path === '/api/announcements') {
         if (method === 'GET') {
           const result = await env.DB.prepare(
@@ -162,8 +169,11 @@ export default {
 
       if (path === '/api/teams') {
         if (method === 'GET') {
+          const includeBasicFieldsOnly = url.searchParams.get('basic') === '1';
           const result = await env.DB.prepare(
-            'SELECT id, name, short, logo, created_at FROM teams ORDER BY id ASC'
+            includeBasicFieldsOnly
+              ? 'SELECT id, name, short, created_at FROM teams ORDER BY id ASC'
+              : 'SELECT id, name, short, logo, created_at FROM teams ORDER BY id ASC'
           ).all();
           return json({ teams: result.results || [] }, corsHeaders);
         }
@@ -211,6 +221,13 @@ export default {
             }
           }, corsHeaders);
         }
+      }
+
+      if (path === '/api/team-logos' && method === 'GET') {
+        const result = await env.DB.prepare(
+          'SELECT short, logo FROM teams WHERE logo IS NOT NULL AND logo != ? ORDER BY id ASC'
+        ).bind('').all();
+        return json({ teams: result.results || [] }, corsHeaders);
       }
 
       if (path.startsWith('/api/teams/') && method === 'DELETE') {
@@ -405,6 +422,137 @@ export default {
       ============================================================ */
 
       // 队长绑定学校（写入 team_profiles）
+      if (path === '/api/match-appointments' && method === 'GET') {
+        const scheduleId = Number(url.searchParams.get('schedule_id'));
+        if (!Number.isInteger(scheduleId) || scheduleId < 1) {
+          return json({ error: '赛程编号无效' }, corsHeaders, 400);
+        }
+        const result = await env.DB.prepare(
+          'SELECT * FROM match_appointments WHERE schedule_id = ? ORDER BY match_index'
+        ).bind(scheduleId).all();
+        const appointments = result.results || [];
+        if (!appointments.length) return json({ appointments: [] }, corsHeaders);
+
+        const ids = appointments.map(a => a.id);
+        const placeholders = ids.map(() => '?').join(',');
+        const viewer = await verifyToken(request, env);
+        const signupResult = await env.DB.prepare(
+          `SELECT appointment_id, role, user_phone, username FROM match_signups WHERE appointment_id IN (${placeholders}) ORDER BY created_at`
+        ).bind(...ids).all();
+        const signupsByAppointment = {};
+        for (const signup of signupResult.results || []) {
+          (signupsByAppointment[signup.appointment_id] ||= []).push({
+            role: signup.role,
+            username: signup.username,
+            is_mine: !!viewer && signup.user_phone === viewer.phone &&
+              (viewer.role === 'admin' || signup.role === viewer.role)
+          });
+        }
+        return json({ appointments: appointments.map(a => {
+          const { created_by_phone, ...publicAppointment } = a;
+          return { ...publicAppointment, signups: signupsByAppointment[a.id] || [] };
+        }) }, corsHeaders);
+      }
+
+      if (path === '/api/match-appointments' && method === 'POST') {
+        const user = await verifyToken(request, env);
+        if (!user || !['team', 'admin'].includes(user.role)) {
+          return json({ error: '仅队长或管理员可以约赛' }, corsHeaders, 403);
+        }
+        const profile = user.role === 'team'
+          ? await env.DB.prepare('SELECT school FROM team_profiles WHERE phone = ?').bind(user.phone).first()
+          : null;
+        if (user.role === 'team' && !profile?.school) return json({ error: '请先绑定自己的学校' }, corsHeaders, 403);
+        const body = await request.json();
+        const scheduleId = Number(body.schedule_id);
+        const matchIndex = Number(body.match_index);
+        const startTime = new Date(body.start_time);
+        if (!Number.isInteger(scheduleId) || scheduleId < 1 || !Number.isInteger(matchIndex) || matchIndex < 0 || Number.isNaN(startTime.getTime())) {
+          return json({ error: '请选择有效对阵并填写比赛时间' }, corsHeaders, 400);
+        }
+        const scheduleRow = await env.DB.prepare('SELECT id, matches FROM schedule WHERE id = ?').bind(scheduleId).first();
+        if (!scheduleRow) return json({ error: '赛程不存在或已更新' }, corsHeaders, 404);
+        let matches;
+        try { matches = JSON.parse(scheduleRow.matches); } catch { matches = []; }
+        const match = matches[matchIndex];
+        const teamA = match && String(match.a || '').trim();
+        const teamB = match && String(match.b || '').trim();
+        if (!teamA || !teamB || teamA === teamB) return json({ error: '该场对阵不完整，不能安排比赛' }, corsHeaders, 400);
+        const bookedBySchool = user.role === 'admin' ? String(body.booked_by_school || teamA).trim() : profile.school;
+        if (![teamA, teamB].includes(bookedBySchool)) {
+          return json({ error: '关联学校必须属于当前对阵' }, corsHeaders, 400);
+        }
+        if (user.role === 'team' && teamA !== profile.school && teamB !== profile.school) {
+          return json({ error: '只能为自己绑定学校所在的对阵约赛' }, corsHeaders, 403);
+        }
+        const validTeams = await env.DB.prepare('SELECT short FROM teams WHERE short IN (?, ?)').bind(teamA, teamB).all();
+        if ((validTeams.results || []).length !== 2) return json({ error: '对阵队伍不在已登记队伍中' }, corsHeaders, 400);
+
+        const existing = await env.DB.prepare(
+          'SELECT id FROM match_appointments WHERE schedule_id = ? AND match_index = ?'
+        ).bind(scheduleId, matchIndex).first();
+        const now = new Date().toISOString();
+        const notes = String(body.notes || '').trim().slice(0, 500);
+        if (existing) {
+          await env.DB.prepare(
+            'UPDATE match_appointments SET start_time = ?, notes = ?, booked_by_school = ?, created_by_phone = ?, created_by_name = ?, created_at = ? WHERE id = ?'
+          ).bind(startTime.toISOString(), notes, bookedBySchool, user.phone, user.username || (user.role === 'admin' ? '管理员' : '队长'), now, existing.id).run();
+        } else {
+          await env.DB.prepare(
+            'INSERT INTO match_appointments (schedule_id, match_index, team_a, team_b, start_time, notes, booked_by_school, created_by_phone, created_by_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(scheduleId, matchIndex, teamA, teamB, startTime.toISOString(), notes, bookedBySchool, user.phone, user.username || (user.role === 'admin' ? '管理员' : '队长'), now).run();
+        }
+        return json({ ok: true }, corsHeaders);
+      }
+
+      const statusPath = path.match(/^\/api\/match-appointments\/(\d+)\/status$/);
+      if (statusPath && method === 'PATCH') {
+        const user = await verifyToken(request, env);
+        if (!user || !['judge', 'admin'].includes(user.role)) {
+          return json({ error: '仅裁判可以更新完赛状态' }, corsHeaders, 403);
+        }
+        const body = await request.json();
+        if (typeof body.is_finished !== 'boolean') return json({ error: '完赛状态无效' }, corsHeaders, 400);
+        const update = await env.DB.prepare(
+          'UPDATE match_appointments SET is_finished = ? WHERE id = ?'
+        ).bind(body.is_finished ? 1 : 0, Number(statusPath[1])).run();
+        if (!update.meta.changes) return json({ error: '比赛安排不存在' }, corsHeaders, 404);
+        return json({ ok: true, is_finished: body.is_finished }, corsHeaders);
+      }
+
+      const signupPath = path.match(/^\/api\/match-appointments\/(\d+)\/signup$/);
+      if (signupPath && (method === 'POST' || method === 'DELETE')) {
+        const user = await verifyToken(request, env);
+        if (!user || !['judge', 'commentator', 'admin'].includes(user.role)) {
+          return json({ error: '请使用裁判、解说或管理员账号报名' }, corsHeaders, 403);
+        }
+        const appointmentId = Number(signupPath[1]);
+        const body = await request.json().catch(() => ({}));
+        const signupRole = user.role === 'admin' ? body.role : user.role;
+        if (!['judge', 'commentator'].includes(signupRole)) {
+          return json({ error: '报名身份无效' }, corsHeaders, 400);
+        }
+        if (method === 'POST') {
+          const appointment = await env.DB.prepare('SELECT id FROM match_appointments WHERE id = ?').bind(appointmentId).first();
+          if (!appointment) return json({ error: '比赛安排不存在' }, corsHeaders, 404);
+          try {
+            await env.DB.prepare(
+              'INSERT INTO match_signups (appointment_id, role, user_phone, username, created_at) VALUES (?, ?, ?, ?, ?)'
+            ).bind(appointmentId, signupRole, user.phone, user.username || '', new Date().toISOString()).run();
+          } catch (err) {
+            if (String(err.message || '').toLowerCase().includes('unique')) {
+              return json({ error: '你已经报名该场比赛' }, corsHeaders, 409);
+            }
+            throw err;
+          }
+          return json({ ok: true }, corsHeaders);
+        }
+        await env.DB.prepare(
+          'DELETE FROM match_signups WHERE appointment_id = ? AND role = ? AND user_phone = ?'
+        ).bind(appointmentId, signupRole, user.phone).run();
+        return json({ ok: true }, corsHeaders);
+      }
+
       if (path === '/api/team/school' && method === 'POST') {
         const user = await verifyToken(request, env);
         if (!user || (user.role !== 'team' && user.role !== 'admin')) {
@@ -655,6 +803,7 @@ async function verifyToken(request, env) {
 
     const payload = JSON.parse(base64UrlDecode(body));
     if (payload.exp && payload.exp < Date.now()) return null;
+    if (payload.role === 'press') payload.role = 'commentator';
 
     return payload;
   } catch {

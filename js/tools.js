@@ -7,6 +7,10 @@ import {
 } from './config.js';
 import { apiRequest, getCurrentUser } from './api.js';
 import { sanitize, getInitialFromName } from './utils.js';
+import { fetchTeams, invalidateTeams, showActionNotice } from './content.js';
+
+const teamSchoolCache = new Map();
+const teamSchoolRequests = new Map();
 
 function userHasRole(role, allowed) {
   if (!allowed || !allowed.length) return true;
@@ -22,6 +26,16 @@ export function renderToolsPanel() {
   if (!introBox || !contentBox) return;
 
   const u = getCurrentUser();
+  if (u?.role === 'team' && !teamSchoolCache.has(u.phone) && !teamSchoolRequests.has(u.phone)) {
+    const request = apiRequest('/api/team/school')
+      .then(data => { teamSchoolCache.set(u.phone, !!data.profile?.school); })
+      .catch(() => { teamSchoolCache.set(u.phone, false); })
+      .finally(() => {
+        teamSchoolRequests.delete(u.phone);
+        renderToolsPanel();
+      });
+    teamSchoolRequests.set(u.phone, request);
+  }
 
   if (u) {
     introBox.innerHTML = `
@@ -62,7 +76,8 @@ export function renderToolsPanel() {
 
   TOOLS_DEF.forEach(tool => {
     const allowed = !tool.roles || (u && userHasRole(u.role, tool.roles));
-    if (allowed && sections[tool.section]) {
+    const schoolRequiredBlocked = tool.requiresSchool && u?.role === 'team' && !teamSchoolCache.get(u.phone);
+    if (allowed && !schoolRequiredBlocked && sections[tool.section]) {
       sections[tool.section].push(tool);
     }
   });
@@ -101,6 +116,12 @@ export function renderToolsPanel() {
       <div class="tools-locked">
         <div class="tools-locked__icon" aria-hidden="true">🔒</div>
         <div class="tools-locked__title">下方的区域请以后再来探索</div>
+      </div>
+    `;
+  } else if (u.role === 'team' && !teamSchoolCache.get(u.phone)) {
+    html += `
+      <div class="tools-locked">
+        <div class="tools-locked__title">请先绑定学校，约赛和选手名单等队伍功能会在绑定后显示。</div>
       </div>
     `;
   }
@@ -189,6 +210,10 @@ async function openToolModal(toolId) {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadTeamPlayersTool(box);
+  } else if (toolId === 'matchBooking') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadMatchBookingTool(box);
   }
 }
 
@@ -243,6 +268,7 @@ let __pendingLogo = null;
 async function loadTeamsTool(box) {
   let list = [];
   try {
+    // 管理界面需要显示上传的 logo；公共页面使用不含图片的轻量接口。
     const data = await apiRequest('/api/teams');
     list = data.teams || [];
   } catch (err) {
@@ -379,6 +405,7 @@ function bindTeamFormEvents() {
         __currentTeams.unshift(data.team);
         renderTeamListBox(__currentTeams);
       }
+      invalidateTeams();                        /* 清缓存，其他页面下次拉最新 */
       if (window.app?.loadTeams) window.app.loadTeams();
     } catch (err) {
       alert('添加失败：' + err.message);
@@ -427,6 +454,7 @@ function renderTeamListBox(list) {
         /* 本地列表直接删掉，不重新请求 */
         __currentTeams = __currentTeams.filter(t => String(t.id) !== String(id));
         renderTeamListBox(__currentTeams);
+        invalidateTeams();                      /* 清缓存 */
         if (window.app?.loadTeams) window.app.loadTeams();
       } catch (err) {
         alert('删除失败：' + err.message);
@@ -643,6 +671,9 @@ function bindDrawEvents() {
 /* ============================================================
    比赛房间
 ============================================================ */
+/* ============================================================
+   比赛房间
+============================================================ */
 async function loadRoomsTool(box) {
   let list = [];
   try {
@@ -653,18 +684,46 @@ async function loadRoomsTool(box) {
     return;
   }
 
-  /* 队伍列表（用于选择对战双方 + 显示全称） */
+  /* 队伍列表（用于选择对战双方 + 显示全称）—— 复用缓存 */
   let teams = [], nameMap = {};
   try {
-    const td = await apiRequest('/api/teams');
+    const td = await fetchTeams();
     teams = td.teams || [];
     teams.forEach(t => { nameMap[t.short] = t.name; });
   } catch (e) {}
   const teamOpts = teams.map(t => `<option value="${sanitize(t.short)}">${sanitize(t.name)}（${sanitize(t.short)}）</option>`).join('');
 
+  /* 拉取已发布的赛程，用于快速选取已知对阵 */
+  let matches = [];
+  try {
+    const sd = await apiRequest('/api/schedule');
+    matches = (sd.schedule && sd.schedule.matches) || [];
+  } catch (e) {}
+
+  const matchOpts = matches.map((m, i) => {
+    const aName = nameMap[m.a] || m.a || '轮空';
+    const bName = nameMap[m.b] || m.b || '轮空';
+    return `<option value="${i}">第 ${i + 1} 场：${sanitize(aName)} VS ${sanitize(bName)}</option>`;
+  }).join('');
+
   box.innerHTML = `
     <h3 class="tool-modal__title">比赛房间 <em>STAFF</em></h3>
     <p class="tool-modal__sub">创建比赛房间号与密码，填写比赛时间、对战双方与主客场，可查看双方选手名单。管理员与裁判均可操作。</p>
+
+    ${matches.length ? `
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>从赛程选择对阵</h4></div>
+      <div class="tool-form">
+        <div class="tool-field">
+          <label for="roomMatchPick">选择已发布的赛程对阵（自动填充对战双方与场次说明）</label>
+          <select id="roomMatchPick">
+            <option value="">-- 手动选择队伍 --</option>
+            ${matchOpts}
+          </select>
+        </div>
+      </div>
+    </section>
+    ` : ''}
 
     <section class="tool-modal__section">
       <div class="tool-modal__section-head"><h4>新建房间</h4></div>
@@ -717,6 +776,30 @@ async function loadRoomsTool(box) {
   `;
 
   renderRoomListBox(list, nameMap);
+
+  /* 从赛程下拉框：一键填充对战双方 + 场次说明 */
+  const matchPick = document.getElementById('roomMatchPick');
+  if (matchPick) {
+    matchPick.addEventListener('change', () => {
+      const idx = matchPick.value;
+      if (idx === '') return;
+      const m = matches[Number(idx)];
+      if (!m) return;
+
+      const aSel = document.getElementById('roomTeamA');
+      const bSel = document.getElementById('roomTeamB');
+      if (aSel) aSel.value = m.a || '';
+      if (bSel) bSel.value = m.b || '';
+
+      /* 若场次说明为空，自动填充「第 N 场 · A VS B」 */
+      const titleInput = document.getElementById('roomTitle');
+      if (titleInput && !titleInput.value.trim()) {
+        const aName = nameMap[m.a] || m.a || '轮空';
+        const bName = nameMap[m.b] || m.b || '轮空';
+        titleInput.value = `第 ${Number(idx) + 1} 场 · ${aName} VS ${bName}`;
+      }
+    });
+  }
 
   document.getElementById('roomAddBtn').addEventListener('click', async () => {
     const code = (document.getElementById('roomCode').value || '').trim();
@@ -864,7 +947,7 @@ async function loadScheduleTool(box) {
 
   box.innerHTML = `
     <h3 class="tool-modal__title">添加赛程 <em>ADMIN</em></h3>
-    <p class="tool-modal__sub">上传包含对阵的 JSON 文件，64 进 32 淘汰赛将立即发布到「赛事流程」页。每场对阵为两个队伍简称。</p>
+    <p class="tool-modal__sub">上传包含对阵的 JSON 文件，64 进 32 淘汰赛将立即发布到「比赛赛程」页。每场对阵为两个队伍简称。</p>
 
     <section class="tool-modal__section">
       <div class="tool-modal__section-head"><h4>上传对阵表</h4></div>
@@ -935,7 +1018,7 @@ async function loadScheduleTool(box) {
         method: 'POST',
         body: JSON.stringify({ title, matches: parsedFile.matches })
       });
-      msg.textContent = '✅ 发布成功，赛事流程页已更新。';
+      msg.textContent = '✅ 发布成功，比赛赛程页已更新。';
       const data = await apiRequest('/api/schedule');
       renderScheduleListBox(data.schedule);
       document.getElementById('scheduleCount').textContent = data.schedule.matches.length + ' 场';
@@ -949,7 +1032,7 @@ async function loadScheduleTool(box) {
   });
 
   document.getElementById('scheduleClearBtn').addEventListener('click', async () => {
-    if (!confirm('确定要清空当前赛程吗？赛事流程页将显示「赛程尚未发布」。')) return;
+    if (!confirm('确定要清空当前赛程吗？比赛赛程页将显示「赛程尚未发布」。')) return;
     try {
       await apiRequest('/api/schedule', { method: 'DELETE' });
       renderScheduleListBox(null);
@@ -990,7 +1073,7 @@ function parseScheduleJson(text) {
     if (Array.isArray(m)) {
       matches.push({ a: String(m[0] || '').trim(), b: String(m[1] || '').trim() });
     } else if (typeof m === 'string') {
-      matches.push({ a: m.trim(), b: '' }); // 扁平数组，后续两两合并
+      matches.push({ a: m.trim(), b: '' });
     } else if (m && typeof m === 'object') {
       matches.push({
         a: String(m.a ?? m.home ?? m.t1 ?? m.team1 ?? '').trim(),
@@ -999,7 +1082,6 @@ function parseScheduleJson(text) {
     }
   });
 
-  // 扁平字符串数组：两两一组
   if (matches.some(p => !p.b)) {
     const flat = matches.map(p => p.a);
     const paired = [];
@@ -1040,18 +1122,135 @@ function renderScheduleListBox(schedule) {
 }
 
 /* ============================================================
+   约赛（已绑定学校的队长）
+============================================================ */
+async function loadMatchBookingTool(box) {
+  const user = getCurrentUser();
+  const isAdmin = user?.role === 'admin';
+  if (!user || (user.role !== 'team' && !isAdmin)) {
+    box.innerHTML = '<div class="tool-modal__info">请使用管理员或队长账号登录后约赛。</div>';
+    return;
+  }
+
+  let profile, schedule, teams = [], appointments = [];
+  try {
+    const [profileData, scheduleData, teamData] = await Promise.all([
+      isAdmin ? Promise.resolve({}) : apiRequest('/api/team/school'),
+      apiRequest('/api/schedule'),
+      fetchTeams().catch(() => ({ teams: [] }))
+    ]);
+    profile = profileData.profile;
+    schedule = scheduleData.schedule;
+    teams = teamData.teams || [];
+    if (schedule) {
+      const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`);
+      appointments = appointmentData.appointments || [];
+    }
+  } catch (err) {
+    box.innerHTML = `<div class="board__state">加载失败：${sanitize(err.message)}</div>`;
+    return;
+  }
+
+  if (!isAdmin && !profile?.school) {
+    box.innerHTML = '<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">请先在“绑定学校”中绑定自己的学校，再提交比赛时间。</div>';
+    return;
+  }
+  if (!schedule?.matches?.length) {
+    box.innerHTML = '<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">当前还没有已发布的比赛赛程。</div>';
+    return;
+  }
+
+  const school = profile?.school || null;
+  const teamNames = Object.fromEntries(teams.map(team => [team.short, team.name || team.short]));
+  const choices = schedule.matches.map((match, index) => ({ match, index }))
+    .filter(({ match }) => !!match.a && !!match.b && (isAdmin || match.a === school || match.b === school));
+  if (!choices.length) {
+    box.innerHTML = `<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">当前赛程中${isAdmin ? '没有可约的对阵' : `没有 ${sanitize(school)} 所在的对阵`}。</div>`;
+    return;
+  }
+  const appointmentByIndex = new Map(appointments.map(item => [item.match_index, item]));
+  box.innerHTML = `
+    <h3 class="tool-modal__title">约赛 <em>TEAM</em></h3>
+    <p class="tool-modal__sub">${isAdmin ? '管理员可为任意对阵提交比赛时间。' : `已锁定绑定学校：<b>${sanitize(teamNames[school] || school)}</b>。这里只显示本校所在的对阵。`}</p>
+    <form class="appointment-form" id="matchBookingForm">
+      <label>选择对阵<select id="bookingMatch" required>${choices.map(({ match, index }) => `<option value="${index}">第 ${index + 1} 场：${sanitize(teamNames[match.a] || match.a)} VS ${sanitize(teamNames[match.b] || match.b)}${appointmentByIndex.has(index) ? '（已约赛）' : ''}</option>`).join('')}</select></label>
+      ${isAdmin ? '<label>关联学校<select id="bookingSchool" required></select></label>' : ''}
+      <label>比赛时间<input id="bookingTime" type="datetime-local" required></label>
+      <label>补充信息（选填）<input id="bookingNotes" type="text" maxlength="500" placeholder="地点或其他安排"></label>
+      <button class="btn btn--primary btn--sm" type="submit">提交比赛时间</button>
+      <span class="appointment-form__message" id="bookingMessage" role="status" aria-live="polite"></span>
+    </form>
+  `;
+
+  const matchSelect = box.querySelector('#bookingMatch');
+  const syncFields = () => {
+    const matchIndex = Number(matchSelect.value);
+    const appointment = appointmentByIndex.get(matchIndex);
+    const selected = schedule.matches[matchIndex];
+    const schoolSelect = box.querySelector('#bookingSchool');
+    if (schoolSelect && selected) {
+      const choices = [selected.a, selected.b].map(short => `<option value="${sanitize(short)}">${sanitize(teamNames[short] || short)}</option>`).join('');
+      schoolSelect.innerHTML = choices;
+      schoolSelect.value = appointment?.booked_by_school && [selected.a, selected.b].includes(appointment.booked_by_school)
+        ? appointment.booked_by_school
+        : selected.a;
+    }
+    const timeInput = box.querySelector('#bookingTime');
+    const notesInput = box.querySelector('#bookingNotes');
+    if (!appointment) { timeInput.value = ''; notesInput.value = ''; return; }
+    const date = new Date(appointment.start_time);
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    timeInput.value = date.toISOString().slice(0, 16);
+    notesInput.value = appointment.notes || '';
+  };
+  matchSelect.addEventListener('change', syncFields);
+  syncFields();
+
+  box.querySelector('#matchBookingForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = box.querySelector('#matchBookingForm button[type="submit"]');
+    if (button.disabled) return;
+    const message = box.querySelector('#bookingMessage');
+    button.disabled = true;
+    message.textContent = '正在提交…';
+    let mutationComplete = false;
+    try {
+      await apiRequest('/api/match-appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          schedule_id: schedule.id,
+          match_index: Number(matchSelect.value),
+          ...(isAdmin ? { booked_by_school: box.querySelector('#bookingSchool').value } : {}),
+          start_time: box.querySelector('#bookingTime').value,
+          notes: box.querySelector('#bookingNotes').value
+        })
+      });
+      mutationComplete = true;
+      message.textContent = '比赛时间已提交';
+      showActionNotice('比赛时间已成功提交');
+      if (window.app?.loadSchedule) await window.app.loadSchedule();
+      await loadMatchBookingTool(box);
+    } catch (err) {
+      message.textContent = mutationComplete ? '预约已成功提交，但页面刷新失败，请重新打开约赛查看。' : err.message;
+      showActionNotice(mutationComplete ? '预约已提交，但页面刷新失败' : err.message, true);
+      button.disabled = false;
+    }
+  });
+}
+
+/* ============================================================
    绑定学校（队伍队长）
 ============================================================ */
 async function loadBindSchoolTool(box) {
   const u = getCurrentUser();
   const isAdmin = u && u.role === 'admin';
 
-  /* 拉取学校列表 + 当前绑定 */
+  /* 拉取学校列表 + 当前绑定 —— 学校列表复用缓存 */
   let schools = [];
   let current = null;
   try {
     const [t, p] = await Promise.all([
-      apiRequest('/api/teams').catch(() => ({ teams: [] })),
+      fetchTeams().catch(() => ({ teams: [] })),
       apiRequest('/api/team/school').catch(() => ({}))
     ]);
     schools = (t.teams || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -1095,6 +1294,9 @@ async function loadBindSchoolTool(box) {
       await apiRequest('/api/team/school', { method: 'POST', body: JSON.stringify({ school }) });
       const msg = document.getElementById('bindSchoolMsg');
       msg.innerHTML = '✅ 已绑定学校：<b>' + sanitize(school) + '</b>，现在可以去「提交选手名单」。';
+      const currentUser = getCurrentUser();
+      if (currentUser?.role === 'team') teamSchoolCache.set(currentUser.phone, true);
+      if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
     } catch (err) {
       alert('绑定失败：' + err.message);
     } finally {
@@ -1119,10 +1321,10 @@ async function loadTeamPlayersTool(box) {
     currentSchool = (p.profile && p.profile.school) || null;
   } catch (e) {}
 
-  /* 管理员：拉取学校列表用于查看任意学校 */
+  /* 管理员：拉取学校列表用于查看任意学校 —— 复用缓存 */
   let schools = [];
   if (isAdmin) {
-    try { schools = (await apiRequest('/api/teams')).teams || []; } catch (e) {}
+    try { schools = (await fetchTeams()).teams || []; } catch (e) {}
   }
 
   const posOpts = PLAYER_POSITIONS.map(v => `<option value="${v}">${v}</option>`).join('');

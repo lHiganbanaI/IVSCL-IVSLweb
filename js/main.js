@@ -3,7 +3,11 @@
 ============================================================ */
 
 import { initUI, setTabChangeCallback } from './ui.js';
-import { initContent, loadAnnouncements, loadTeams, loadSchedule } from './content.js';
+import {
+  initContent,
+  loadAnnouncements, loadTeams, loadSchedule,
+  loadHistory, loadThanks, loadStaff
+} from './content.js';
 import { initAuth, setAuthChangeCallback } from './auth.js';
 import { initTools, renderToolsPanel } from './tools.js';
 
@@ -15,25 +19,37 @@ window.app = {
   renderToolsPanel
 };
 
-/* 标签切换时刷新对应内容 */
-setTabChangeCallback((name) => {
-  if (name === 'tools') renderToolsPanel();
-  if (name === 'teams') loadTeams();
+/* tab 数据懒加载：每个 tab 只加载一次 */
+const __tabLoaded = new Set();
+
+function ensureTabLoaded(name) {
+  if (__tabLoaded.has(name)) return;
+  __tabLoaded.add(name);
+
+  if (name === 'tools')    renderToolsPanel();
+  if (name === 'teams')    loadTeams();
   if (name === 'schedule') loadSchedule();
+  if (name === 'about')    { loadHistory(); loadThanks(); loadStaff(); }
+}
+
+/* 标签切换时按需加载对应内容 */
+setTabChangeCallback((name) => {
+  ensureTabLoaded(name);
 });
 
 /* 登录状态变化时刷新工具面板 */
 setAuthChangeCallback(() => {
   renderToolsPanel();
+  loadSchedule();
 });
 
 /* 初始化 */
 initUI();
-initContent();
+initContent();   /* 只加载主页需要的公告 + Q&A */
 initAuth();
 initTools();
 
-/* 如果首屏直接落在 tools 标签，补一次渲染 */
-if (document.querySelector('.panel[data-panel="tools"]')?.classList.contains('is-active')) {
-  renderToolsPanel();
-}
+/* 若初始 hash 落在其他 tab，补一次懒加载（initUI 中 activate 已触发过回调，
+   但这里作为兜底，防止时序问题） */
+const initialTab = (location.hash.replace('#', '') || 'home');
+ensureTabLoaded(initialTab);

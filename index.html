@@ -10,6 +10,9 @@
 <meta name="description" content="IVSCL & IVSL 联合赛季官方赛事网站。2026 年 10 月 1 日开赛，报名通道现已开启，欢迎各高校战队参与。">
 <meta name="keywords" content="IVSCL,IVSL,高校电竞,电子竞技,联合赛季,2026,报名">
 
+<!-- 首屏 LCP 大图预加载：让浏览器尽早开始下载 -->
+<link rel="preload" as="image" href="assets/misc/promo.jpg" fetchpriority="high">
+
 <link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
 <link rel="apple-touch-icon" href="assets/loge/loge_IVSCL.jpg">
 <link rel="stylesheet" href="css/style.css">
@@ -53,7 +56,7 @@
       <button class="tab" data-tab="about" role="tab" aria-selected="false">赛事相关</button>
       <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
       <button class="tab" data-tab="schedule" role="tab" aria-selected="false">
-        赛事流程
+        比赛赛程
       </button>
       <button class="tab" data-tab="tools" role="tab" aria-selected="false">网页功能</button>
     </nav>
@@ -111,7 +114,7 @@
           <span class="film__badge">OFFICIAL FILM · 官方宣传片</span>
           <div class="film__media">
             <img src="assets/misc/promo.jpg" alt="IVSCL & IVSL 联合赛季宣传图"
-                 decoding="async" data-zoom="宣传图">
+                 fetchpriority="high" decoding="async" data-zoom="宣传图">
           </div>
           <div class="film__bar">
             <b>联合赛季</b>
@@ -267,6 +270,17 @@
         </div>
       </section>
 
+      <section class="about-section reveal">
+        <div class="thanks-intro">
+          <p class="thanks-intro__eyebrow">STAFF DIRECTORY</p>
+          <h3 class="thanks-intro__title">工作人员一览</h3>
+          <p class="thanks-intro__desc">本届赛事裁判与解说名单</p>
+        </div>
+        <div class="thanks-grid" id="staffGrid" aria-live="polite" aria-busy="true">
+          <div class="board__state" style="grid-column:1/-1">正在加载工作人员名单…</div>
+        </div>
+      </section>
+
       <div class="cta reveal">
         <div class="cta__inner">
           <h2 class="cta__title">想了解最新赛事动态？</h2>
@@ -286,6 +300,11 @@
         <p class="eyebrow">TEAMS</p>
         <h2>参赛队伍</h2>
         <p class="sub">本届赛事参赛战队一览 · 名单持续更新中</p>
+      </div>
+
+      <div class="list-controls" role="search">
+        <label class="list-controls__search"><span>搜索队伍</span><input id="teamsSearch" type="search" placeholder="输入队伍名称或简称" autocomplete="off"></label>
+        <span class="list-controls__count" id="teamsResultCount" aria-live="polite"></span>
       </div>
 
       <div class="teams-grid" id="teamsGrid" aria-live="polite" aria-busy="true">
@@ -309,8 +328,8 @@
     <div class="wrap">
       <div class="page-head">
         <p class="eyebrow">SCHEDULE</p>
-        <h2>赛事流程</h2>
-        <p class="sub">64 进 32 淘汰赛 · 对阵表持续更新中</p>
+        <h2>比赛赛程</h2>
+        <p class="sub">查看比赛时间与对阵详情</p>
       </div>
 
       <section class="schedule-board" id="scheduleBoard" aria-live="polite" aria-busy="true">

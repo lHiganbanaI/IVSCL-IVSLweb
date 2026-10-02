@@ -17,7 +17,7 @@ export const ROLE_LABELS = {
   team:  '队伍队长',
   judge: '裁判',
   staff: '工作人员',
-  press: '媒体',
+  commentator: '解说',
   fan:   '观众'
 };
 
@@ -125,7 +125,7 @@ export const TOOLS_DEF = [
     section: 'admin',
     icon: '🗓️',
     title: '添加赛程',
-    desc: '上传 JSON 对阵表，64 进 32 淘汰赛立即发布到赛事流程页',
+    desc: '上传 JSON 对阵表，64 进 32 淘汰赛立即发布到比赛赛程页',
     roles: ['admin']
   },
   {
@@ -134,7 +134,7 @@ export const TOOLS_DEF = [
     icon: '🏫',
     title: '绑定学校',
     desc: '绑定你的队伍学校（队长，从学校列表选择）',
-    roles: ['team']
+    roles: ['team', 'admin']
   },
   {
     id: 'teamPlayers',
@@ -142,7 +142,17 @@ export const TOOLS_DEF = [
     icon: '👥',
     title: '提交选手名单',
     desc: '提交求生/监管/双边选手与教练名单（教练无需 uid）',
-    roles: ['team', 'admin']
+    roles: ['team', 'admin'],
+    requiresSchool: true
+  },
+  {
+    id: 'matchBooking',
+    section: 'team',
+    icon: '🗓️',
+    title: '约赛',
+    desc: '为赛程中的对阵选择并提交比赛时间',
+    roles: ['team', 'admin'],
+    requiresSchool: true
   }
 ];
 

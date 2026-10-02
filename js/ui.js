@@ -4,7 +4,6 @@
 
 export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'tools'];
 
-/* 由 main.js 注入的回调 */
 let onTabChange = null;
 
 export function setTabChangeCallback(fn) {
@@ -142,7 +141,7 @@ function initLightbox() {
 }
 
 /* ============================================================
-   倒计时
+   倒计时（改用 setInterval，页面隐藏时暂停）
 ============================================================ */
 function initCountdown() {
   const box = document.getElementById('countdown');
@@ -156,23 +155,27 @@ function initCountdown() {
     seconds: box.querySelector('[data-unit="seconds"]')
   };
   const pad = n => String(n).padStart(2, '0');
-  let lastSec = -1;
 
-  function tick() {
+  function render() {
     const diff = Math.max(0, target - Date.now());
-    const sec  = Math.floor(diff / 1000);
-    if (sec !== lastSec) {
-      lastSec = sec;
-      units.days.textContent    = pad(Math.floor(diff / 86400000));
-      units.hours.textContent   = pad(Math.floor(diff / 3600000) % 24);
-      units.minutes.textContent = pad(Math.floor(diff / 60000) % 60);
-      units.seconds.textContent = pad(sec % 60);
-    }
-    requestAnimationFrame(tick);
+    units.days.textContent    = pad(Math.floor(diff / 86400000));
+    units.hours.textContent   = pad(Math.floor(diff / 3600000) % 24);
+    units.minutes.textContent = pad(Math.floor(diff / 60000) % 60);
+    units.seconds.textContent = pad(Math.floor(diff / 1000) % 60);
   }
-  tick();
+
+  render();
+  let timer = setInterval(render, 1000);
+
+  /* 页面切到后台时停掉定时器，回来时立即刷新 */
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) lastSec = -1;
+    if (document.hidden) {
+      clearInterval(timer);
+      timer = null;
+    } else {
+      if (!timer) timer = setInterval(render, 1000);
+      render();
+    }
   });
 }
 
