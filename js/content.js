@@ -230,11 +230,11 @@ export async function loadHomeSchedule() {
     const pad = n => String(n).padStart(2, '0');
     const dStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     return dStr === todayStr;
-  });
+  }).slice(0, 2);   // 最多显示 2 条
 
   let label = '今日';
   if (!show.length) {
-    show = upcoming.slice(0, 4);
+    show = upcoming.slice(0, 2);   // 降级时也只显示 2 条
     label = '近期';
   }
 
@@ -244,15 +244,12 @@ export async function loadHomeSchedule() {
     return;
   }
 
-  box.innerHTML = show.map(item => {
+    box.innerHTML = show.map(item => {
     const aName = nameMap[item.match.a] || item.match.a || '轮空';
     const bName = nameMap[item.match.b] || item.match.b || '轮空';
     const timeStr = item.appointment?.start_time
       ? formatBeijing(item.appointment.start_time)
       : '待定';
-    const status = item.appointment
-      ? '<span class="home-schedule__tag home-schedule__tag--booked">已约赛</span>'
-      : '<span class="home-schedule__tag">待约赛</span>';
     return `
       <li class="home-schedule__item">
         <div class="home-schedule__meta">
@@ -264,10 +261,9 @@ export async function loadHomeSchedule() {
           <em>VS</em>
           <span>${sanitize(bName)}</span>
         </div>
-        ${status}
       </li>
     `;
-  }).join('');
+    }).join('');
   box.setAttribute('aria-busy', 'false');
 }
 
@@ -314,7 +310,7 @@ export async function loadHomeResults() {
     .map((m, i) => ({ match: m, index: i, appointment: appointmentByIndex.get(i) }))
     .filter(item => item.appointment?.is_finished && item.appointment.score_a != null && item.appointment.score_b != null)
     .sort((a, b) => (b.appointment.id || 0) - (a.appointment.id || 0))
-    .slice(0, 3);
+    .slice(0, 1);
 
   if (!finished.length) {
     box.innerHTML = '<li class="home-schedule__state">还没有已完赛的比赛</li>';
@@ -486,98 +482,43 @@ async function renderTeamsByTab() {
   if (__currentTeamsTab === 'mine') {
     if (searchBar) searchBar.hidden = true;
 
+    /* ---------- 未绑定：显示"绑定 / 创建"两个按钮 ---------- */
     if (!__mySchool) {
       grid.innerHTML = '';
       grid.hidden = true;
 
       if (mineEmpty) {
         mineEmpty.hidden = false;
-
-        const options = (__teamsListCache || [])
-          .slice()
-          .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-          .map(t => `<option value="${sanitize(t.short)}">${sanitize(t.name)}（${sanitize(t.short)}）</option>`)
-          .join('');
-
         mineEmpty.innerHTML = `
           <div class="my-team-empty">
             <div class="my-team-empty__head">
               <div class="my-team-empty__icon">🏫</div>
               <div class="my-team-empty__text">
                 <div class="my-team-empty__title">你还没有绑定队伍</div>
-                <div class="my-team-empty__desc">从已有队伍中选择你的学校，或创建一个全新的学校队伍</div>
+                <div class="my-team-empty__desc">从已有队伍中绑定你的学校，或创建一个全新的学校队伍</div>
               </div>
             </div>
 
-            <div class="my-team-empty__section">
-              <div class="my-team-empty__section-head">
-                <span class="my-team-empty__badge">①</span>
-                <h4>绑定已有队伍</h4>
-              </div>
-              <p class="my-team-empty__tip">管理员已创建的学校会出现在下方，选中并绑定后，学校名称、Logo、简称会自动带过来。</p>
-              <div class="my-team-empty__bind">
-                <select id="bindTeamSelect" class="my-team-empty__select">
-                  <option value="">-- 请选择学校 --</option>
-                  ${options}
-                </select>
-                <button class="btn btn--primary btn--sm" id="bindTeamBtn" type="button">立即绑定</button>
-              </div>
-              <div class="draw-info" id="bindTeamMsg" hidden></div>
-            </div>
-
-            <div class="my-team-empty__divider"><span>或者</span></div>
-
-            <div class="my-team-empty__section">
-              <div class="my-team-empty__section-head">
-                <span class="my-team-empty__badge">②</span>
-                <h4>创建新队伍</h4>
-              </div>
-              <p class="my-team-empty__tip">如果学校不在列表中，可以创建全新队伍，填写学校信息、上传 Logo 并录入选手名单。</p>
-              <button class="btn btn--ghost btn--sm" id="createMyTeamBtn" type="button">🏫 创建我的队伍</button>
+            <div class="my-team-empty__actions">
+              <button class="btn btn--primary btn--block" id="bindTeamBtn" type="button">🔗 绑定已有队伍</button>
+              <button class="btn btn--ghost btn--block" id="createMyTeamBtn" type="button">🏫 创建新队伍</button>
             </div>
           </div>
         `;
 
-        const sel = document.getElementById('bindTeamSelect');
-        const msg = document.getElementById('bindTeamMsg');
-        document.getElementById('bindTeamBtn')?.addEventListener('click', async () => {
-          const school = sel.value;
-          if (!school) { showActionNotice('请先选择学校', true); return; }
-
-          const btn = document.getElementById('bindTeamBtn');
-          const original = btn.textContent;
-          btn.disabled = true;
-          btn.textContent = '绑定中…';
-          if (msg) { msg.hidden = true; msg.textContent = ''; }
-
-          try {
-            await apiRequest('/api/team/school', {
-              method: 'POST',
-              body: JSON.stringify({ school })
-            });
-            showActionNotice('已绑定队伍');
-            if (msg) { msg.hidden = false; msg.textContent = '✅ 绑定成功，正在刷新…'; }
-            await refreshMySchool();
-            await renderTeamsByTab();
-            if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
-          } catch (err) {
-            showActionNotice(err.message, true);
-            if (msg) { msg.hidden = false; msg.textContent = err.message; }
-            btn.disabled = false;
-            btn.textContent = original;
-          }
-        });
-
+        document.getElementById('bindTeamBtn')?.addEventListener('click', () => openTeamBindPanel());
         document.getElementById('createMyTeamBtn')?.addEventListener('click', () => openTeamEditorPanel(null));
       }
       return;
     }
 
+    /* ---------- 已绑定：显示自己那支队伍 ---------- */
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
     const mine = __teamsListCache.filter(t => t.short === __mySchool);
     renderTeams(mine, grid, { editMode: true });
   } else {
+    /* 所有队伍 */
     if (searchBar) searchBar.hidden = false;
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
@@ -649,11 +590,13 @@ function showTeamsAdminView() {
   const adminView = document.getElementById('teamsAdminView');
   const detailView = document.getElementById('teamsAdminDetailView');
   const editorPanel = document.getElementById('teamEditorPanel');
+  const bindPanel = document.getElementById('teamBindPanel');
   if (!main || !adminView) return;
 
   main.hidden = true;
   if (detailView) detailView.hidden = true;
   if (editorPanel) editorPanel.hidden = true;
+  if (bindPanel) bindPanel.hidden = true;
   adminView.hidden = false;
 
   renderTeamsAdminList();
@@ -809,10 +752,12 @@ function showTeamEditorPanel() {
   const mainView = document.getElementById('teamsMainView');
   const adminView = document.getElementById('teamsAdminView');
   const detailView = document.getElementById('teamsAdminDetailView');
+  const bindPanel = document.getElementById('teamBindPanel');
   if (!panel || !mainView) return;
   mainView.hidden = true;
   if (adminView) adminView.hidden = true;
   if (detailView) detailView.hidden = true;
+  if (bindPanel) bindPanel.hidden = true;
   panel.hidden = false;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -828,7 +773,140 @@ function closeTeamEditorPanel() {
 }
 
 /* ============================================================
-   通用工具
+   绑定已有队伍：内嵌面板
+============================================================ */
+async function openTeamBindPanel() {
+  const panel = document.getElementById('teamBindPanel');
+  const mainView = document.getElementById('teamsMainView');
+  if (!panel || !mainView) return;
+
+  mainView.hidden = true;
+  panel.hidden = false;
+  panel.innerHTML = '<div class="board__state" style="padding:60px 20px">加载学校列表中…</div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  /* 拉取队伍列表 */
+  let teams = (__teamsListCache || []).slice();
+  if (!teams.length) {
+    try {
+      const data = await fetchTeams();
+      teams = data.teams || [];
+      __teamsListCache = teams;
+    } catch (err) {
+      panel.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+      return;
+    }
+  }
+
+  /* 拉取所有队伍 Logo */
+  let logoMap = {};
+  try {
+    const ld = await fetchTeamLogos();
+    (ld.teams || []).forEach(t => { if (t.short && t.logo) logoMap[t.short] = t.logo; });
+  } catch {}
+
+  teams.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  panel.innerHTML = `
+    <div class="team-bind-card">
+      <div class="team-bind-card__head">
+        <h3 class="team-editor-card__title">绑定已有队伍 <em>TEAM</em></h3>
+        <button class="btn btn--ghost btn--sm" id="tbBackBtn" type="button">← 返回</button>
+      </div>
+      <p class="tool-modal__sub">从下方选择你的学校，点击后自动绑定。绑定成功后可以立即填写队员信息（游戏 ID / CN / CN 简称）。</p>
+
+      <div class="team-bind-search">
+        <input type="search" id="tbSearch" placeholder="搜索学校名称或简称" autocomplete="off">
+        <span class="team-bind-search__count" id="tbCount"></span>
+      </div>
+
+      <div class="team-bind-grid" id="tbGrid"></div>
+    </div>
+  `;
+
+  const grid = panel.querySelector('#tbGrid');
+  const search = panel.querySelector('#tbSearch');
+  const count = panel.querySelector('#tbCount');
+
+  const render = () => {
+    const q = (search.value || '').trim().toLowerCase();
+    const list = teams.filter(t => !q || (t.name || '').toLowerCase().includes(q) || (t.short || '').toLowerCase().includes(q));
+
+    if (count) count.textContent = q ? `匹配 ${list.length} / ${teams.length} 所` : `共 ${teams.length} 所学校`;
+
+    if (!list.length) {
+      grid.innerHTML = '<div class="board__state" style="grid-column:1/-1">没有匹配的学校</div>';
+      return;
+    }
+
+    grid.innerHTML = list.map(t => {
+      const logoSrc = logoMap[t.short] || t.logo || `${TEAM_LOGO_DIR}loge_${t.short}${TEAM_LOGO_EXT}`;
+      return `
+        <div class="team-bind-item" data-bind-team="${sanitize(t.short)}" role="button" tabindex="0">
+          <div class="team-bind-item__logo">
+            <img src="${logoSrc}" alt="${sanitize(t.name)} logo" loading="lazy"
+              onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23182242%22 stroke=%22%23d4b47a%22 stroke-width=%222%22 stroke-dasharray=%226 6%22/><text x=%2250%22 y=%2264%22 font-size=%2240%22 font-weight=%22900%22 fill=%22%23d4b47a%22 text-anchor=%22middle%22 font-family=%22sans-serif%22>?</text></svg>'">
+          </div>
+          <div class="team-bind-item__name">${sanitize(t.name)}</div>
+          <div class="team-bind-item__short">${sanitize(t.short)}</div>
+          <button class="team-bind-item__btn" type="button">绑定此学校</button>
+        </div>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('[data-bind-team]').forEach(card => {
+      const bind = async () => {
+        if (card.classList.contains('is-binding')) return;
+        const school = card.dataset.bindTeam;
+        card.classList.add('is-binding');
+        const btn = card.querySelector('.team-bind-item__btn');
+        const original = btn?.textContent;
+        if (btn) { btn.disabled = true; btn.textContent = '绑定中…'; }
+        try {
+          await apiRequest('/api/team/school', {
+            method: 'POST',
+            body: JSON.stringify({ school })
+          });
+          showActionNotice('已绑定队伍：' + school);
+
+          await refreshMySchool();
+
+          /* 关闭绑定面板，回到我的队伍 */
+          panel.hidden = true;
+          panel.innerHTML = '';
+          mainView.hidden = false;
+          await renderTeamsByTab();
+
+          /* 关键：自动打开「编辑队员」面板，让用户立即上传选手信息 */
+          await openPlayerEditorPanel(school);
+
+          if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
+        } catch (err) {
+          showActionNotice(err.message, true);
+          card.classList.remove('is-binding');
+          if (btn) { btn.disabled = false; btn.textContent = original; }
+        }
+      };
+      card.addEventListener('click', bind);
+      card.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); bind(); }
+      });
+    });
+  };
+
+  search.addEventListener('input', render);
+  panel.querySelector('#tbBackBtn')?.addEventListener('click', () => {
+    panel.hidden = true;
+    panel.innerHTML = '';
+    mainView.hidden = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  render();
+}
+
+/* ============================================================
+   通用工具：图片压缩
 ============================================================ */
 const PLAYER_POSITIONS = ['求生', '监管', '双边'];
 
@@ -1401,7 +1479,7 @@ export async function loadThanks() {
 }
 
 /* ============================================================
-   工作人员一览（无头像，两列网格）
+   工作人员一览
 ============================================================ */
 export async function loadStaff() {
   const box = document.getElementById('staffGrid');
