@@ -7,7 +7,7 @@ import {
   initContent,
   loadAnnouncements, loadTeams, loadSchedule,
   loadHistory, loadThanks, loadStaff
-} from './content.js?v=20261003-15';
+} from './content.js?v=20261003-22';
 import { initAuth, setAuthChangeCallback } from './auth.js';
 import { initTools, renderToolsPanel } from './tools.js';
 
