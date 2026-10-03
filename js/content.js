@@ -11,9 +11,6 @@ import {
   DEFAULT_QAS, DEFAULT_HISTORY, DEFAULT_THANKS
 } from './config.js';
 import { parseTournament } from './tournament.js';
-import {
-  fetchVotes, voteCount, hasVoted, bindVoteButton
-} from './votes.js';
 
 /* ============================================================
    /api/teams 请求缓存
@@ -360,7 +357,6 @@ let __teamsTabsBound = false;
 
 export function renderTeams(list, container, opts = {}) {
   const editMode = opts.editMode === true;
-  const votesData = opts.votesData || null;
 
   if (!list || !list.length) {
     container.innerHTML = '<div class="board__state" style="grid-column:1/-1">暂无队伍信息</div>';
@@ -377,9 +373,6 @@ export function renderTeams(list, container, opts = {}) {
       ? item.logo
       : `${TEAM_LOGO_DIR}loge_${short}${TEAM_LOGO_EXT}`;
 
-    const voteCnt = votesData ? voteCount(votesData, 'team', item.short) : 0;
-    const voted   = votesData ? hasVoted(votesData, 'team', item.short) : false;
-
     return `
       <div class="team-card" data-team-card-short="${short}">
         ${editMode ? `<button class="team-card__edit" data-team-edit="${short}" type="button" aria-label="编辑队员">✏️ 编辑队员</button>` : ''}
@@ -389,28 +382,9 @@ export function renderTeams(list, container, opts = {}) {
         </div>
         <h3 class="team-card__name">${name}</h3>
         <span class="team-card__short">${short}</span>
-        <button class="vote-btn ${voted ? 'is-voted' : ''}"
-                data-vote-team="${sanitize(item.short)}"
-                type="button"
-                aria-label="${voted ? '取消打 Call' : '打 Call'}">
-          <span class="vote-btn__icon">🔥</span>
-          <span class="vote-btn__count">${voteCnt}</span>
-        </button>
       </div>
     `;
   }).join('');
-
-  /* 投票按钮绑定 */
-  container.querySelectorAll('[data-vote-team]').forEach(btn => {
-    bindVoteButton(btn, 'team', btn.dataset.voteTeam, (res, el) => {
-      el.classList.toggle('is-voted', res.voted);
-      const cnt = el.querySelector('.vote-btn__count');
-      if (cnt) cnt.textContent = res.count;
-      el.setAttribute('aria-label', res.voted ? '取消打 Call' : '打 Call');
-      el.classList.add('is-bump');
-      setTimeout(() => el.classList.remove('is-bump'), 350);
-    });
-  });
 
   const search = document.getElementById('teamsSearch');
   const count = document.getElementById('teamsResultCount');
@@ -445,7 +419,6 @@ export function renderTeams(list, container, opts = {}) {
   container.setAttribute('aria-busy', 'false');
 }
 
-/* 拉取队长绑定的学校 */
 async function refreshMySchool() {
   const user = getCurrentUser();
   __mySchool = null;
@@ -465,7 +438,6 @@ async function refreshMySchool() {
   }
 }
 
-/* 更新顶部标签 + 管理员操作区 */
 function updateTeamsChrome() {
   const user = getCurrentUser();
   const mineTab = document.querySelector('[data-teams-tab="mine"]');
@@ -511,13 +483,9 @@ async function renderTeamsByTab() {
   const mineEmpty = document.getElementById('myTeamEmpty');
   if (!grid) return;
 
-  let votesData = null;
-  try { votesData = await fetchVotes(); } catch {}
-
   if (__currentTeamsTab === 'mine') {
     if (searchBar) searchBar.hidden = true;
 
-    /* ---------- 未绑定：显示"绑定/创建"两种入口 ---------- */
     if (!__mySchool) {
       grid.innerHTML = '';
       grid.hidden = true;
@@ -570,7 +538,6 @@ async function renderTeamsByTab() {
           </div>
         `;
 
-        /* 绑定已有队伍 */
         const sel = document.getElementById('bindTeamSelect');
         const msg = document.getElementById('bindTeamMsg');
         document.getElementById('bindTeamBtn')?.addEventListener('click', async () => {
@@ -601,22 +568,20 @@ async function renderTeamsByTab() {
           }
         });
 
-        /* 创建新队伍 */
         document.getElementById('createMyTeamBtn')?.addEventListener('click', () => openTeamEditorPanel(null));
       }
       return;
     }
 
-    /* ---------- 已绑定：只显示自己那支队伍 ---------- */
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
     const mine = __teamsListCache.filter(t => t.short === __mySchool);
-    renderTeams(mine, grid, { editMode: true, votesData });
+    renderTeams(mine, grid, { editMode: true });
   } else {
     if (searchBar) searchBar.hidden = false;
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
-    renderTeams(__teamsListCache, grid, { editMode: false, votesData });
+    renderTeams(__teamsListCache, grid, { editMode: false });
   }
 }
 
@@ -707,7 +672,6 @@ function hideTeamsAdminView() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// 暴露给 tools.js 调用
 window.__showTeamsAdminView = showTeamsAdminView;
 
 function renderTeamsAdminList() {
@@ -864,7 +828,7 @@ function closeTeamEditorPanel() {
 }
 
 /* ============================================================
-   通用工具：图片压缩
+   通用工具
 ============================================================ */
 const PLAYER_POSITIONS = ['求生', '监管', '双边'];
 
@@ -1437,77 +1401,42 @@ export async function loadThanks() {
 }
 
 /* ============================================================
-   工作人员一览（含投票）
+   工作人员一览（无头像，两列网格）
 ============================================================ */
 export async function loadStaff() {
   const box = document.getElementById('staffGrid');
   if (!box) return;
   box.setAttribute('aria-busy', 'true');
-
-  let staff = [];
-  let votesData = null;
   try {
-    const [data, v] = await Promise.all([
-      apiRequest('/api/staff'),
-      fetchVotes().catch(() => null)
-    ]);
-    staff = Array.isArray(data.staff) ? data.staff : [];
-    votesData = v;
-  } catch (err) {
-    box.innerHTML = `<div class="board__state" style="grid-column:1/-1">工作人员名单暂时无法加载：${sanitize(err.message)}</div>`;
-    box.setAttribute('aria-busy', 'false');
-    return;
-  }
-
-  const groups = [
-    { role: 'judge', title: '裁判', sub: 'REFEREES', icon: '⚖️' },
-    { role: 'commentator', title: '解说', sub: 'COMMENTATORS', icon: '🎙️' }
-  ];
-
-  box.innerHTML = groups.map(group => {
-    const names = staff.filter(person => person.role === group.role);
-    const rows = names.length
-      ? names.map(person => {
-          const key = person.username || '';
-          const cnt = votesData ? voteCount(votesData, 'staff', key) : 0;
-          const voted = votesData ? hasVoted(votesData, 'staff', key) : false;
-          return `
+    const data = await apiRequest('/api/staff');
+    const staff = Array.isArray(data.staff) ? data.staff : [];
+    const groups = [
+      { role: 'judge', title: '裁判', sub: 'REFEREES', icon: '⚖️' },
+      { role: 'commentator', title: '解说', sub: 'COMMENTATORS', icon: '🎙️' }
+    ];
+    box.innerHTML = groups.map(group => {
+      const names = staff.filter(person => person.role === group.role);
+      const rows = names.length
+        ? names.map(person => `
             <li class="staff-name-row">
               <span class="staff-name-row__name">${sanitize(person.username || '未命名')}</span>
-              <button class="vote-btn vote-btn--sm ${voted ? 'is-voted' : ''}"
-                      data-vote-staff="${sanitize(key)}"
-                      type="button"
-                      aria-label="${voted ? '取消打 Call' : '打 Call'}">
-                <span class="vote-btn__icon">🔥</span>
-                <span class="vote-btn__count">${cnt}</span>
-              </button>
             </li>
-          `;
-        }).join('')
-      : '<li class="staff-empty">暂未登记</li>';
-    return `
-      <article class="thanks-card staff-card">
-        <div class="thanks-card__head">
-          <span class="thanks-card__icon" aria-hidden="true">${group.icon}</span>
-          <div class="thanks-card__info"><h4>${group.title}</h4><span class="thanks-card__sub">${group.sub}</span></div>
-          <span class="tool-modal__count">${names.length} 人</span>
-        </div>
-        <ul class="thanks-card__list">${rows}</ul>
-      </article>
-    `;
-  }).join('');
-
-  box.querySelectorAll('[data-vote-staff]').forEach(btn => {
-    bindVoteButton(btn, 'staff', btn.dataset.voteStaff, (res, el) => {
-      el.classList.toggle('is-voted', res.voted);
-      const cnt = el.querySelector('.vote-btn__count');
-      if (cnt) cnt.textContent = res.count;
-      el.setAttribute('aria-label', res.voted ? '取消打 Call' : '打 Call');
-      el.classList.add('is-bump');
-      setTimeout(() => el.classList.remove('is-bump'), 350);
-    });
-  });
-
+          `).join('')
+        : '<li class="staff-empty">暂未登记</li>';
+      return `
+        <article class="thanks-card staff-card">
+          <div class="thanks-card__head">
+            <span class="thanks-card__icon" aria-hidden="true">${group.icon}</span>
+            <div class="thanks-card__info"><h4>${group.title}</h4><span class="thanks-card__sub">${group.sub}</span></div>
+            <span class="tool-modal__count">${names.length} 人</span>
+          </div>
+          <ul class="thanks-card__list">${rows}</ul>
+        </article>
+      `;
+    }).join('');
+  } catch (err) {
+    box.innerHTML = `<div class="board__state" style="grid-column:1/-1">工作人员名单暂时无法加载：${sanitize(err.message)}</div>`;
+  }
   box.setAttribute('aria-busy', 'false');
 }
 
@@ -1921,7 +1850,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
 
   const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
 
-  /* 状态优先级：已约赛(0) → 待约赛(1) → 已完赛(2) */
   const statusPriority = appt => {
     if (appt?.is_finished) return 2;
     if (appt) return 0;
