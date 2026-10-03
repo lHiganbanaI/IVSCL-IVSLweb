@@ -11,6 +11,9 @@ import {
   DEFAULT_QAS, DEFAULT_HISTORY, DEFAULT_THANKS
 } from './config.js';
 import { parseTournament } from './tournament.js';
+import {
+  fetchVotes, voteCount, hasVoted, bindVoteButton
+} from './votes.js';
 
 /* ============================================================
    /api/teams 请求缓存
@@ -183,7 +186,7 @@ export async function loadHomeSchedule() {
     schedule = scheduleData.schedule;
     (teamData.teams || []).forEach(t => { nameMap[t.short] = t.name; });
 
-    if (schedule?.matches?.length) {
+    if (schedule && schedule.matches) {
       const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] }));
       appointments = appointmentData.appointments || [];
     }
@@ -193,14 +196,17 @@ export async function loadHomeSchedule() {
     return;
   }
 
-  if (!schedule?.matches?.length) {
+  const tournament = schedule ? parseTournament(schedule.matches) : null;
+  const flatMatches = tournament ? tournament.allMatches : (Array.isArray(schedule?.matches) ? schedule.matches : []);
+
+  if (!flatMatches.length) {
     box.innerHTML = '<li class="home-schedule__state">赛程尚未发布</li>';
     box.setAttribute('aria-busy', 'false');
     return;
   }
 
   const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
-  const list = schedule.matches.map((m, i) => ({
+  const list = flatMatches.map((m, i) => ({
     match: m,
     index: i,
     appointment: appointmentByIndex.get(i)
@@ -287,7 +293,7 @@ export async function loadHomeResults() {
     schedule = scheduleData.schedule;
     (teamData.teams || []).forEach(t => { nameMap[t.short] = t.name; });
 
-    if (schedule?.matches?.length) {
+    if (schedule && schedule.matches) {
       const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] }));
       appointments = appointmentData.appointments || [];
     }
@@ -297,14 +303,17 @@ export async function loadHomeResults() {
     return;
   }
 
-  if (!schedule?.matches?.length) {
+  const tournament = schedule ? parseTournament(schedule.matches) : null;
+  const flatMatches = tournament ? tournament.allMatches : (Array.isArray(schedule?.matches) ? schedule.matches : []);
+
+  if (!flatMatches.length) {
     box.innerHTML = '<li class="home-schedule__state">赛程尚未发布</li>';
     box.setAttribute('aria-busy', 'false');
     return;
   }
 
   const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
-  const finished = schedule.matches
+  const finished = flatMatches
     .map((m, i) => ({ match: m, index: i, appointment: appointmentByIndex.get(i) }))
     .filter(item => item.appointment?.is_finished && item.appointment.score_a != null && item.appointment.score_b != null)
     .sort((a, b) => (b.appointment.id || 0) - (a.appointment.id || 0))
@@ -351,6 +360,7 @@ let __teamsTabsBound = false;
 
 export function renderTeams(list, container, opts = {}) {
   const editMode = opts.editMode === true;
+  const votesData = opts.votesData || null;
 
   if (!list || !list.length) {
     container.innerHTML = '<div class="board__state" style="grid-column:1/-1">暂无队伍信息</div>';
@@ -367,6 +377,9 @@ export function renderTeams(list, container, opts = {}) {
       ? item.logo
       : `${TEAM_LOGO_DIR}loge_${short}${TEAM_LOGO_EXT}`;
 
+    const voteCnt = votesData ? voteCount(votesData, 'team', item.short) : 0;
+    const voted   = votesData ? hasVoted(votesData, 'team', item.short) : false;
+
     return `
       <div class="team-card" data-team-card-short="${short}">
         ${editMode ? `<button class="team-card__edit" data-team-edit="${short}" type="button" aria-label="编辑队员">✏️ 编辑队员</button>` : ''}
@@ -376,9 +389,28 @@ export function renderTeams(list, container, opts = {}) {
         </div>
         <h3 class="team-card__name">${name}</h3>
         <span class="team-card__short">${short}</span>
+        <button class="vote-btn ${voted ? 'is-voted' : ''}"
+                data-vote-team="${sanitize(item.short)}"
+                type="button"
+                aria-label="${voted ? '取消打 Call' : '打 Call'}">
+          <span class="vote-btn__icon">🔥</span>
+          <span class="vote-btn__count">${voteCnt}</span>
+        </button>
       </div>
     `;
   }).join('');
+
+  /* 投票按钮绑定 */
+  container.querySelectorAll('[data-vote-team]').forEach(btn => {
+    bindVoteButton(btn, 'team', btn.dataset.voteTeam, (res, el) => {
+      el.classList.toggle('is-voted', res.voted);
+      const cnt = el.querySelector('.vote-btn__count');
+      if (cnt) cnt.textContent = res.count;
+      el.setAttribute('aria-label', res.voted ? '取消打 Call' : '打 Call');
+      el.classList.add('is-bump');
+      setTimeout(() => el.classList.remove('is-bump'), 350);
+    });
+  });
 
   const search = document.getElementById('teamsSearch');
   const count = document.getElementById('teamsResultCount');
@@ -473,41 +505,118 @@ function bindTeamsTabs() {
   });
 }
 
-function renderTeamsByTab() {
+async function renderTeamsByTab() {
   const grid = document.getElementById('teamsGrid');
   const searchBar = document.getElementById('teamsSearchBar');
   const mineEmpty = document.getElementById('myTeamEmpty');
   if (!grid) return;
 
+  let votesData = null;
+  try { votesData = await fetchVotes(); } catch {}
+
   if (__currentTeamsTab === 'mine') {
     if (searchBar) searchBar.hidden = true;
 
+    /* ---------- 未绑定：显示"绑定/创建"两种入口 ---------- */
     if (!__mySchool) {
       grid.innerHTML = '';
       grid.hidden = true;
+
       if (mineEmpty) {
         mineEmpty.hidden = false;
+
+        const options = (__teamsListCache || [])
+          .slice()
+          .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+          .map(t => `<option value="${sanitize(t.short)}">${sanitize(t.name)}（${sanitize(t.short)}）</option>`)
+          .join('');
+
         mineEmpty.innerHTML = `
-          <div class="board__state" style="border-style:dashed;padding:50px 20px">
-            <div style="font-size:15px;font-weight:900;color:#fff;margin-bottom:8px">你还没有创建队伍</div>
-            <div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">点击下方按钮上传学校信息、Logo 与选手名单</div>
-            <button class="btn btn--primary" id="createMyTeamBtn" type="button">🏫 创建我的队伍</button>
+          <div class="my-team-empty">
+            <div class="my-team-empty__head">
+              <div class="my-team-empty__icon">🏫</div>
+              <div class="my-team-empty__text">
+                <div class="my-team-empty__title">你还没有绑定队伍</div>
+                <div class="my-team-empty__desc">从已有队伍中选择你的学校，或创建一个全新的学校队伍</div>
+              </div>
+            </div>
+
+            <div class="my-team-empty__section">
+              <div class="my-team-empty__section-head">
+                <span class="my-team-empty__badge">①</span>
+                <h4>绑定已有队伍</h4>
+              </div>
+              <p class="my-team-empty__tip">管理员已创建的学校会出现在下方，选中并绑定后，学校名称、Logo、简称会自动带过来。</p>
+              <div class="my-team-empty__bind">
+                <select id="bindTeamSelect" class="my-team-empty__select">
+                  <option value="">-- 请选择学校 --</option>
+                  ${options}
+                </select>
+                <button class="btn btn--primary btn--sm" id="bindTeamBtn" type="button">立即绑定</button>
+              </div>
+              <div class="draw-info" id="bindTeamMsg" hidden></div>
+            </div>
+
+            <div class="my-team-empty__divider"><span>或者</span></div>
+
+            <div class="my-team-empty__section">
+              <div class="my-team-empty__section-head">
+                <span class="my-team-empty__badge">②</span>
+                <h4>创建新队伍</h4>
+              </div>
+              <p class="my-team-empty__tip">如果学校不在列表中，可以创建全新队伍，填写学校信息、上传 Logo 并录入选手名单。</p>
+              <button class="btn btn--ghost btn--sm" id="createMyTeamBtn" type="button">🏫 创建我的队伍</button>
+            </div>
           </div>
         `;
+
+        /* 绑定已有队伍 */
+        const sel = document.getElementById('bindTeamSelect');
+        const msg = document.getElementById('bindTeamMsg');
+        document.getElementById('bindTeamBtn')?.addEventListener('click', async () => {
+          const school = sel.value;
+          if (!school) { showActionNotice('请先选择学校', true); return; }
+
+          const btn = document.getElementById('bindTeamBtn');
+          const original = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = '绑定中…';
+          if (msg) { msg.hidden = true; msg.textContent = ''; }
+
+          try {
+            await apiRequest('/api/team/school', {
+              method: 'POST',
+              body: JSON.stringify({ school })
+            });
+            showActionNotice('已绑定队伍');
+            if (msg) { msg.hidden = false; msg.textContent = '✅ 绑定成功，正在刷新…'; }
+            await refreshMySchool();
+            await renderTeamsByTab();
+            if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
+          } catch (err) {
+            showActionNotice(err.message, true);
+            if (msg) { msg.hidden = false; msg.textContent = err.message; }
+            btn.disabled = false;
+            btn.textContent = original;
+          }
+        });
+
+        /* 创建新队伍 */
         document.getElementById('createMyTeamBtn')?.addEventListener('click', () => openTeamEditorPanel(null));
       }
       return;
     }
 
+    /* ---------- 已绑定：只显示自己那支队伍 ---------- */
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
     const mine = __teamsListCache.filter(t => t.short === __mySchool);
-    renderTeams(mine, grid, { editMode: true });
+    renderTeams(mine, grid, { editMode: true, votesData });
   } else {
     if (searchBar) searchBar.hidden = false;
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
-    renderTeams(__teamsListCache, grid, { editMode: false });
+    renderTeams(__teamsListCache, grid, { editMode: false, votesData });
   }
 }
 
@@ -523,7 +632,7 @@ export async function loadTeams() {
   try {
     const data = await fetchTeams();
     __teamsListCache = data.teams || [];
-    renderTeamsByTab();
+    await renderTeamsByTab();
 
     fetchTeamLogos().then(result => {
       if (!box.isConnected) return;
@@ -1328,42 +1437,77 @@ export async function loadThanks() {
 }
 
 /* ============================================================
-   工作人员一览
+   工作人员一览（含投票）
 ============================================================ */
 export async function loadStaff() {
   const box = document.getElementById('staffGrid');
   if (!box) return;
   box.setAttribute('aria-busy', 'true');
+
+  let staff = [];
+  let votesData = null;
   try {
-    const data = await apiRequest('/api/staff');
-    const staff = Array.isArray(data.staff) ? data.staff : [];
-    const groups = [
-      { role: 'judge', title: '裁判', sub: 'REFEREES', icon: '⚖️' },
-      { role: 'commentator', title: '解说', sub: 'COMMENTATORS', icon: '🎙️' }
-    ];
-    box.innerHTML = groups.map(group => {
-      const names = staff.filter(person => person.role === group.role);
-      const rows = names.length
-        ? names.map(person => `
-            <li class="staff-name-row">
-              <span class="staff-name-row__name">${sanitize(person.username || '未命名')}</span>
-            </li>
-          `).join('')
-        : '<li class="staff-empty">暂未登记</li>';
-      return `
-        <article class="thanks-card staff-card">
-          <div class="thanks-card__head">
-            <span class="thanks-card__icon" aria-hidden="true">${group.icon}</span>
-            <div class="thanks-card__info"><h4>${group.title}</h4><span class="thanks-card__sub">${group.sub}</span></div>
-            <span class="tool-modal__count">${names.length} 人</span>
-          </div>
-          <ul class="thanks-card__list">${rows}</ul>
-        </article>
-      `;
-    }).join('');
+    const [data, v] = await Promise.all([
+      apiRequest('/api/staff'),
+      fetchVotes().catch(() => null)
+    ]);
+    staff = Array.isArray(data.staff) ? data.staff : [];
+    votesData = v;
   } catch (err) {
     box.innerHTML = `<div class="board__state" style="grid-column:1/-1">工作人员名单暂时无法加载：${sanitize(err.message)}</div>`;
+    box.setAttribute('aria-busy', 'false');
+    return;
   }
+
+  const groups = [
+    { role: 'judge', title: '裁判', sub: 'REFEREES', icon: '⚖️' },
+    { role: 'commentator', title: '解说', sub: 'COMMENTATORS', icon: '🎙️' }
+  ];
+
+  box.innerHTML = groups.map(group => {
+    const names = staff.filter(person => person.role === group.role);
+    const rows = names.length
+      ? names.map(person => {
+          const key = person.username || '';
+          const cnt = votesData ? voteCount(votesData, 'staff', key) : 0;
+          const voted = votesData ? hasVoted(votesData, 'staff', key) : false;
+          return `
+            <li class="staff-name-row">
+              <span class="staff-name-row__name">${sanitize(person.username || '未命名')}</span>
+              <button class="vote-btn vote-btn--sm ${voted ? 'is-voted' : ''}"
+                      data-vote-staff="${sanitize(key)}"
+                      type="button"
+                      aria-label="${voted ? '取消打 Call' : '打 Call'}">
+                <span class="vote-btn__icon">🔥</span>
+                <span class="vote-btn__count">${cnt}</span>
+              </button>
+            </li>
+          `;
+        }).join('')
+      : '<li class="staff-empty">暂未登记</li>';
+    return `
+      <article class="thanks-card staff-card">
+        <div class="thanks-card__head">
+          <span class="thanks-card__icon" aria-hidden="true">${group.icon}</span>
+          <div class="thanks-card__info"><h4>${group.title}</h4><span class="thanks-card__sub">${group.sub}</span></div>
+          <span class="tool-modal__count">${names.length} 人</span>
+        </div>
+        <ul class="thanks-card__list">${rows}</ul>
+      </article>
+    `;
+  }).join('');
+
+  box.querySelectorAll('[data-vote-staff]').forEach(btn => {
+    bindVoteButton(btn, 'staff', btn.dataset.voteStaff, (res, el) => {
+      el.classList.toggle('is-voted', res.voted);
+      const cnt = el.querySelector('.vote-btn__count');
+      if (cnt) cnt.textContent = res.count;
+      el.setAttribute('aria-label', res.voted ? '取消打 Call' : '打 Call');
+      el.classList.add('is-bump');
+      setTimeout(() => el.classList.remove('is-bump'), 350);
+    });
+  });
+
   box.setAttribute('aria-busy', 'false');
 }
 
@@ -1646,7 +1790,7 @@ function showMatchDetails(match, appointment) {
       showActionNotice(isSigned ? `已取消${roleLabel}报名` : `${roleLabel}报名成功`);
       const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
       currentAppointments = data.appointments || [];
-      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments);
+      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments, currentTournament);
       const updated = currentAppointments.find(a => a.id === appointment.id);
       showMatchDetails(match, updated);
     } catch (err) {
@@ -1671,7 +1815,7 @@ function showMatchDetails(match, appointment) {
       showActionNotice('比赛已恢复为未完赛，比分已清空');
       const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
       currentAppointments = data.appointments || [];
-      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments);
+      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments, currentTournament);
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
     } catch (err) {
       showActionNotice(mutationComplete ? '状态已更新，但赛程刷新失败' : err.message, true);
@@ -1736,7 +1880,7 @@ function showMatchDetails(match, appointment) {
       showActionNotice('比分已保存');
       const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
       currentAppointments = data.appointments || [];
-      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments);
+      renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments, currentTournament);
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
     } catch (err) {
       showActionNotice(mutationComplete ? '比分已保存，但刷新失败' : err.message, true);
@@ -1754,6 +1898,7 @@ let currentScheduleTitle = '';
 let currentScheduleLogoMap = {};
 let currentScheduleNameMap = {};
 let currentAppointments = [];
+let currentTournament = null;
 let scheduleResizeHandler = null;
 let scheduleLoadSequence = 0;
 
@@ -1783,7 +1928,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     return 1;
   };
 
-  /* 单个对阵的排序函数 */
   const sortItems = (a, b) => {
     const pa = statusPriority(a.appointment);
     const pb = statusPriority(b.appointment);
@@ -1793,14 +1937,13 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     return ta - tb || a.flatIndex - b.flatIndex;
   };
 
-  /* ---------- 分组 ---------- */
   const grouped = [];
-  if (tournament && tournament.rounds?.length) {
+  if (tournament && tournament.rounds && tournament.rounds.length) {
     let flatIndex = 0;
     tournament.rounds.forEach(r => {
       const roundMatches = r.matches.map((m, mi) => ({
         match: m,
-        flatIndex: flatIndex + mi,      // 原始扁平索引，用于详情弹窗
+        flatIndex: flatIndex + mi,
         roundIndex: r.index,
         roundName: r.name,
         appointment: appointmentByIndex.get(flatIndex + mi)
@@ -1821,7 +1964,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     grouped.push({ round: { index: 1, name: `${list.length * 2} 进 ${list.length}` }, items });
   }
 
-  /* ---------- 顶部概览 ---------- */
   const overviewHtml = grouped.map(g => {
     const done = g.items.filter(it => it.appointment?.is_finished).length;
     const total = g.items.length;
@@ -1840,7 +1982,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     `;
   }).join('');
 
-  /* ---------- 每轮卡片（默认只显示 8 场） ---------- */
   const INITIAL_LIMIT = 8;
 
   const roundsHtml = grouped.map(g => {
@@ -1932,7 +2073,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     <p class="schedule-no-results" id="scheduleNoResults" hidden>没有符合条件的对阵，请调整搜索内容或比赛状态。</p>
   `;
 
-  /* ---------- 卡片点击 ---------- */
   container.querySelectorAll('[data-match-index]').forEach(card => {
     const open = () => {
       const idx = Number(card.dataset.matchIndex);
@@ -1944,7 +2084,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     });
   });
 
-  /* ---------- 每轮"显示更多/收起"按钮 ---------- */
   container.querySelectorAll('.schedule-round__more').forEach(btn => {
     btn.addEventListener('click', () => {
       const section = btn.closest('.schedule-round');
@@ -1953,7 +2092,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
       section.dataset.expanded = nextExpanded ? 'true' : 'false';
       btn.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
 
-      /* 恢复该轮所有折叠卡片的显隐 */
       section.querySelectorAll('[data-collapsed="true"]').forEach(card => {
         card.hidden = !nextExpanded;
       });
@@ -1963,7 +2101,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     });
   });
 
-  /* ---------- 搜索 + 状态过滤 ---------- */
   const searchInput = container.querySelector('#scheduleSearch');
   const statusFilter = container.querySelector('#scheduleStatusFilter');
   const resultCount = container.querySelector('#scheduleResultCount');
@@ -1988,7 +2125,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
 
         if (isMatch) {
           const isCollapsed = card.dataset.collapsed === 'true';
-          /* 有搜索/过滤时忽略折叠，直接展示所有匹配项；无过滤时按折叠状态 */
           card.hidden = !isFiltering && !expanded && isCollapsed;
           sectionVisible++;
         } else {
@@ -1999,7 +2135,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
       visible += sectionVisible;
       section.hidden = sectionVisible === 0;
 
-      /* 过滤时隐藏"显示更多"按钮，因为所有匹配项已展示 */
       const moreBtn = section.querySelector('.schedule-round__more');
       if (moreBtn) {
         const totalCollapsed = cards.filter(c => c.dataset.collapsed === 'true').length;
@@ -2020,8 +2155,6 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
   container.setAttribute('aria-busy', 'false');
 }
 
-let currentTournament = null;
-
 export async function loadSchedule() {
   const box = document.getElementById('scheduleBoard');
   if (!box) return;
@@ -2036,7 +2169,6 @@ export async function loadSchedule() {
       return;
     }
 
-    /* 解析赛制对象 */
     const tournament = parseTournament(s.matches);
     const flatMatches = tournament ? tournament.allMatches : (Array.isArray(s.matches) ? s.matches : []);
 
