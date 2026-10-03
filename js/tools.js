@@ -11,6 +11,15 @@ import {
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
 import { fetchTeams, invalidateTeams, showActionNotice } from './content.js';
+import {
+  TOURNAMENT_TYPES,
+  TOURNAMENT_TYPE_LABELS,
+  parseTournament,
+  buildTournamentFromRaw,
+  SingleElimination,
+  DoubleElimination,
+  GroupStage
+} from './tournament.js';
 
 const teamSchoolCache = new Map();
 const teamSchoolRequests = new Map();
@@ -124,7 +133,7 @@ export function renderToolsPanel() {
   } else if (u.role === 'team' && !teamSchoolCache.get(u.phone)) {
     html += `
       <div class="tools-locked">
-        <div class="tools-locked__title">请先绑定学校，约赛和选手名单等队伍功能会在绑定后显示。</div>
+        <div class="tools-locked__title">请先绑定学校，约赛和队伍相关功能会在绑定后显示。</div>
       </div>
     `;
   }
@@ -138,6 +147,12 @@ export function renderToolsPanel() {
       if (!tool) return;
       if (tool.external) {
         window.open(tool.external, '_blank', 'noopener');
+        return;
+      }
+      /* 队伍管理：直接跳转到队伍信息页并打开管理视图 */
+      if (id === 'teams') {
+        document.querySelector('.tab[data-tab="teams"]')?.click();
+        setTimeout(() => window.__showTeamsAdminView?.(), 300);
         return;
       }
       openToolModal(id);
@@ -188,10 +203,6 @@ async function openToolModal(toolId) {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadAnnouncementsTool(box);
-  } else if (toolId === 'teams') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadTeamsTool(box);
   } else if (toolId === 'draw') {
     box.innerHTML = renderDrawTool();
     window.__toolModal.openModal();
@@ -209,10 +220,6 @@ async function openToolModal(toolId) {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadBindSchoolTool(box);
-  } else if (toolId === 'teamPlayers') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadTeamPlayersTool(box);
   } else if (toolId === 'matchBooking') {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
@@ -221,254 +228,14 @@ async function openToolModal(toolId) {
 }
 
 /* ============================================================
-   图片压缩工具
+   公告栏管理（默认"动态"、日期选择、置顶）
 ============================================================ */
-function compressImage(file, maxSize = 300, quality = 0.78) {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('请选择图片文件'));
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-
-        if (width > height && width > maxSize) {
-          height = Math.round(height * maxSize / width);
-          width = maxSize;
-        } else if (height > maxSize) {
-          width = Math.round(width * maxSize / height);
-          height = maxSize;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-        const dataUrl = canvas.toDataURL(outputType, quality);
-        resolve(dataUrl);
-      };
-      img.onerror = () => reject(new Error('图片解析失败'));
-      img.src = e.target.result;
-    };
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsDataURL(file);
-  });
+function todayDateStr() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/* ============================================================
-   队伍管理
-============================================================ */
-let __currentTeams = [];
-let __pendingLogo = null;
-
-async function loadTeamsTool(box) {
-  let list = [];
-  try {
-    // 管理界面需要显示上传的 logo；公共页面使用不含图片的轻量接口。
-    const data = await apiRequest('/api/teams');
-    list = data.teams || [];
-  } catch (err) {
-    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
-    return;
-  }
-
-  __currentTeams = list;
-  __pendingLogo = null;
-
-  box.innerHTML = `
-    <h3 class="tool-modal__title">队伍管理 <em>ADMIN</em></h3>
-    <p class="tool-modal__sub">上传学校 logo、填写名称与简称即可创建队伍。修改后队伍信息页会立即更新。</p>
-
-    <section class="tool-modal__section">
-      <div class="tool-modal__section-head"><h4>新增队伍</h4></div>
-      <div class="tool-form">
-        <div class="tool-form__row">
-          <div class="tool-field">
-            <label for="teamName">学校 / 战队全称</label>
-            <input type="text" id="teamName" placeholder="例如：进才中学" maxlength="30">
-          </div>
-          <div class="tool-field">
-            <label for="teamShort">学校简称（英文/拼音）</label>
-            <input type="text" id="teamShort" placeholder="例如：jczx" maxlength="20">
-          </div>
-        </div>
-
-        <div class="tool-field">
-          <label for="teamLogo">学校 Logo（建议方形，自动压缩到 300px）</label>
-          <input type="file" id="teamLogo" accept="image/*">
-        </div>
-
-        <div class="team-logo-preview" id="teamLogoPreview" hidden>
-          <div class="team-logo-preview__img" id="teamLogoPreviewImg"></div>
-          <div class="team-logo-preview__info">
-            <b>预览</b>
-            <span id="teamLogoInfo">—</span>
-          </div>
-          <button class="team-logo-preview__clear" id="teamLogoClear" type="button" aria-label="清除">✕</button>
-        </div>
-      </div>
-
-      <div class="tool-actions">
-        <button class="btn btn--primary btn--sm" id="teamAddBtn" type="button">+ 添加队伍</button>
-      </div>
-    </section>
-
-    <section class="tool-modal__section">
-      <div class="tool-modal__section-head">
-        <h4>当前队伍</h4>
-        <span class="tool-modal__count" id="teamCount">${list.length} 支</span>
-      </div>
-      <ul class="tool-list" id="teamList"></ul>
-    </section>
-  `;
-
-  renderTeamListBox(list);
-  bindTeamFormEvents();
-}
-
-function bindTeamFormEvents() {
-  const fileInput = document.getElementById('teamLogo');
-  const preview = document.getElementById('teamLogoPreview');
-  const previewImg = document.getElementById('teamLogoPreviewImg');
-  const previewInfo = document.getElementById('teamLogoInfo');
-  const clearBtn = document.getElementById('teamLogoClear');
-
-  fileInput?.addEventListener('change', async () => {
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) {
-      __pendingLogo = null;
-      if (preview) preview.hidden = true;
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('图片过大（超过 5MB），请换一张');
-      fileInput.value = '';
-      return;
-    }
-
-    try {
-      const dataUrl = await compressImage(file, 300, 0.78);
-      __pendingLogo = dataUrl;
-
-      if (previewImg) previewImg.style.backgroundImage = `url(${dataUrl})`;
-      if (previewInfo) {
-        const kb = Math.round(dataUrl.length / 1024);
-        previewInfo.textContent = `已选择 ${file.name}（压缩后 ${kb} KB）`;
-      }
-      if (preview) preview.hidden = false;
-    } catch (err) {
-      alert('图片处理失败：' + err.message);
-      fileInput.value = '';
-    }
-  });
-
-  clearBtn?.addEventListener('click', () => {
-    __pendingLogo = null;
-    if (fileInput) fileInput.value = '';
-    if (preview) preview.hidden = true;
-  });
-
-  document.getElementById('teamAddBtn')?.addEventListener('click', async () => {
-    const name = (document.getElementById('teamName').value || '').trim();
-    const short = (document.getElementById('teamShort').value || '').trim();
-    if (!name || !short) { alert('名称和简称都不能为空'); return; }
-
-    const btn = document.getElementById('teamAddBtn');
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = __pendingLogo ? '上传中…' : '添加中…';
-
-    try {
-      const data = await apiRequest('/api/teams', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          short,
-          logo: __pendingLogo || null
-        })
-      });
-
-      /* 重置表单 */
-      document.getElementById('teamName').value = '';
-      document.getElementById('teamShort').value = '';
-      if (fileInput) fileInput.value = '';
-      if (preview) preview.hidden = true;
-      __pendingLogo = null;
-
-      /* 直接插到本地列表，不重新请求 */
-      if (data.team) {
-        __currentTeams.unshift(data.team);
-        renderTeamListBox(__currentTeams);
-      }
-      invalidateTeams();                        /* 清缓存，其他页面下次拉最新 */
-      if (window.app?.loadTeams) window.app.loadTeams();
-    } catch (err) {
-      alert('添加失败：' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }
-  });
-}
-
-function renderTeamListBox(list) {
-  const ul = document.getElementById('teamList');
-  const cnt = document.getElementById('teamCount');
-  if (!ul) return;
-  if (!list.length) {
-    ul.innerHTML = '<li class="tool-list__empty">暂无队伍</li>';
-  } else {
-    ul.innerHTML = list.map(item => {
-      const thumb = item.logo
-        ? `<span class="tool-list__thumb" style="background-image:url(${item.logo})"></span>`
-        : `<span class="tool-list__thumb tool-list__thumb--empty">?</span>`;
-
-      return `
-        <li class="tool-list__item">
-          ${thumb}
-          <div class="tool-list__body">
-            <div class="tool-list__title">${sanitize(item.name)}</div>
-            <div class="tool-list__meta">
-              <span>🔖 ${sanitize(item.short || '')}</span>
-              ${item.logo ? '' : '<span style="color:#ffb3c0">⚠ 未上传 logo</span>'}
-            </div>
-          </div>
-          <button class="tool-list__remove" data-team-remove="${item.id}" aria-label="删除">✕</button>
-        </li>
-      `;
-    }).join('');
-  }
-  if (cnt) cnt.textContent = list.length + ' 支';
-
-  ul.querySelectorAll('[data-team-remove]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.teamRemove;
-      if (!confirm('确定要删除这支队伍吗？')) return;
-      try {
-        await apiRequest('/api/teams/' + id, { method: 'DELETE' });
-        /* 本地列表直接删掉，不重新请求 */
-        __currentTeams = __currentTeams.filter(t => String(t.id) !== String(id));
-        renderTeamListBox(__currentTeams);
-        invalidateTeams();                      /* 清缓存 */
-        if (window.app?.loadTeams) window.app.loadTeams();
-      } catch (err) {
-        alert('删除失败：' + err.message);
-      }
-    });
-  });
-}
-
-/* ============================================================
-   公告栏管理
-============================================================ */
 async function loadAnnouncementsTool(box) {
   let list = [];
   try {
@@ -481,7 +248,7 @@ async function loadAnnouncementsTool(box) {
 
   box.innerHTML = `
     <h3 class="tool-modal__title">公告栏管理 <em>ADMIN</em></h3>
-    <p class="tool-modal__sub">新增或删除官方公告，保存后主页公告栏会立即更新。</p>
+    <p class="tool-modal__sub">新增或删除官方公告，支持置顶与选择日期。保存后主页公告栏立即更新。</p>
 
     <section class="tool-modal__section">
       <div class="tool-modal__section-head"><h4>新增公告</h4></div>
@@ -489,22 +256,29 @@ async function loadAnnouncementsTool(box) {
         <div class="tool-form__row">
           <div class="tool-field">
             <label for="annTag">标签文字</label>
-            <input type="text" id="annTag" placeholder="例如：置顶 / 报名 / 动态" maxlength="10">
+            <input type="text" id="annTag" placeholder="动态 / 报名 / 赛程…" maxlength="10" value="动态">
           </div>
           <div class="tool-field">
             <label for="annTagClass">标签样式</label>
             <select id="annTagClass">
+              <option value="tag--event" selected>紫色（动态）</option>
               <option value="tag--notice">金色（公告）</option>
               <option value="tag--signup">青色（报名）</option>
-              <option value="tag--event">紫色（动态）</option>
               <option value="tag--hot">红色（热门）</option>
             </select>
           </div>
           <div class="tool-field">
-            <label for="annTime">时间</label>
-            <input type="text" id="annTime" placeholder="今天 / 06-10" value="今天">
+            <label for="annTime">日期</label>
+            <input type="date" id="annTime" value="${todayDateStr()}">
           </div>
         </div>
+
+        <label class="ann-pinned-toggle" for="annPinned">
+          <input type="checkbox" id="annPinned">
+          <span class="ann-pinned-toggle__box"></span>
+          <span class="ann-pinned-toggle__label">📌 置顶此公告</span>
+        </label>
+
         <div class="tool-field">
           <label for="annText">正文内容（支持 &lt;b&gt; 加粗）</label>
           <textarea id="annText" placeholder="例如：本届赛事定于 2026 年 10 月 1 日开赛。"></textarea>
@@ -527,10 +301,11 @@ async function loadAnnouncementsTool(box) {
   renderAnnListBox(list);
 
   document.getElementById('annAddBtn').addEventListener('click', async () => {
-    const tag = (document.getElementById('annTag').value || '').trim() || '公告';
-    const tagClass = document.getElementById('annTagClass').value || 'tag--notice';
-    const time = (document.getElementById('annTime').value || '').trim() || '今天';
+    const tag = (document.getElementById('annTag').value || '').trim() || '动态';
+    const tagClass = document.getElementById('annTagClass').value || 'tag--event';
+    const time = (document.getElementById('annTime').value || '').trim() || todayDateStr();
     const text = (document.getElementById('annText').value || '').trim();
+    const isPinned = document.getElementById('annPinned').checked;
     if (!text) { alert('正文不能为空'); return; }
 
     const btn = document.getElementById('annAddBtn');
@@ -541,10 +316,12 @@ async function loadAnnouncementsTool(box) {
     try {
       await apiRequest('/api/announcements', {
         method: 'POST',
-        body: JSON.stringify({ tag, tagClass, time, text })
+        body: JSON.stringify({ tag, tagClass, time, text, isPinned })
       });
-      document.getElementById('annTag').value = '';
+      document.getElementById('annTag').value = '动态';
       document.getElementById('annText').value = '';
+      document.getElementById('annPinned').checked = false;
+      document.getElementById('annTime').value = todayDateStr();
       const data = await apiRequest('/api/announcements');
       renderAnnListBox(data.announcements || []);
       if (window.app?.loadAnnouncements) window.app.loadAnnouncements();
@@ -561,25 +338,50 @@ function renderAnnListBox(list) {
   const ul = document.getElementById('annList');
   const cnt = document.getElementById('annCount');
   if (!ul) return;
+
   if (!list.length) {
     ul.innerHTML = '<li class="tool-list__empty">暂无公告</li>';
   } else {
     ul.innerHTML = list.map(item => `
-      <li class="tool-list__item">
+      <li class="tool-list__item ${item.is_pinned ? 'is-pinned' : ''}">
         <div class="tool-list__body">
           <div class="tool-list__title">
-            <span class="msg__tag ${item.tag_class || 'tag--notice'}" style="margin-right:8px">${sanitize(item.tag || '公告')}</span>
+            ${item.is_pinned ? '<span class="ann-pin-tag">📌 置顶</span>' : ''}
+            <span class="msg__tag ${item.tag_class || 'tag--event'}" style="margin-right:8px">${sanitize(item.tag || '动态')}</span>
             ${sanitize(item.text || '')}
           </div>
           <div class="tool-list__meta">
-            <span>🕐 ${sanitize(item.time || '')}</span>
+            <span>📅 ${sanitize(item.time || '未设置')}</span>
           </div>
         </div>
-        <button class="tool-list__remove" data-ann-remove="${item.id}" aria-label="删除">✕</button>
+        <div class="tool-list__actions">
+          <button class="tool-list__pin ${item.is_pinned ? 'is-pinned' : ''}"
+                  data-ann-pin="${item.id}" data-pinned="${item.is_pinned ? 1 : 0}"
+                  aria-label="${item.is_pinned ? '取消置顶' : '置顶'}">📌</button>
+          <button class="tool-list__remove" data-ann-remove="${item.id}" aria-label="删除">✕</button>
+        </div>
       </li>
     `).join('');
   }
   if (cnt) cnt.textContent = list.length + ' 条';
+
+  ul.querySelectorAll('[data-ann-pin]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.annPin;
+      const isPinned = btn.dataset.pinned === '1';
+      try {
+        await apiRequest('/api/announcements/' + id + '/pin', {
+          method: 'PATCH',
+          body: JSON.stringify({ is_pinned: !isPinned })
+        });
+        const data = await apiRequest('/api/announcements');
+        renderAnnListBox(data.announcements || []);
+        if (window.app?.loadAnnouncements) window.app.loadAnnouncements();
+      } catch (err) {
+        alert('操作失败：' + err.message);
+      }
+    });
+  });
 
   ul.querySelectorAll('[data-ann-remove]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -684,7 +486,6 @@ async function loadRoomsTool(box) {
     return;
   }
 
-  /* 队伍列表（用于选择对战双方 + 显示全称）—— 复用缓存 */
   let teams = [], nameMap = {};
   try {
     const td = await fetchTeams();
@@ -693,7 +494,6 @@ async function loadRoomsTool(box) {
   } catch (e) {}
   const teamOpts = teams.map(t => `<option value="${sanitize(t.short)}">${sanitize(t.name)}（${sanitize(t.short)}）</option>`).join('');
 
-  /* 拉取已发布的赛程，用于快速选取已知对阵 */
   let matches = [];
   try {
     const sd = await apiRequest('/api/schedule');
@@ -777,7 +577,6 @@ async function loadRoomsTool(box) {
 
   renderRoomListBox(list, nameMap);
 
-  /* 从赛程下拉框：一键填充对战双方 + 场次说明 */
   const matchPick = document.getElementById('roomMatchPick');
   if (matchPick) {
     matchPick.addEventListener('change', () => {
@@ -791,7 +590,6 @@ async function loadRoomsTool(box) {
       if (aSel) aSel.value = m.a || '';
       if (bSel) bSel.value = m.b || '';
 
-      /* 若场次说明为空，自动填充「第 N 场 · A VS B」 */
       const titleInput = document.getElementById('roomTitle');
       if (titleInput && !titleInput.value.trim()) {
         const aName = nameMap[m.a] || m.a || '轮空';
@@ -805,7 +603,6 @@ async function loadRoomsTool(box) {
     const code = (document.getElementById('roomCode').value || '').trim();
     const password = (document.getElementById('roomPassword').value || '').trim();
     const title = (document.getElementById('roomTitle').value || '').trim();
-    /* 统一转为带 +08:00 的 ISO 字符串，避免后端按 UTC 解析 */
     const start_time = beijingISOFromLocal(document.getElementById('roomStart').value || '');
     const team_a = (document.getElementById('roomTeamA').value || '').trim();
     const team_b = (document.getElementById('roomTeamB').value || '').trim();
@@ -849,11 +646,10 @@ function renderRoomListBox(list, nameMap) {
     box.innerHTML = '<li class="tool-list__empty">暂无房间</li>';
   } else {
     const fullName = (short) => nameMap[short] ? nameMap[short] + '（' + short + '）' : (short || '—');
-    /* 统一按北京时间显示，输出 "MM-DD HH:mm" 紧凑样式 */
     const fmtTime = (t) => {
       if (!t) return '';
-      const s = formatBeijing(t);   // "2026-10-02 20:30"
-      return s ? s.slice(5) : String(t); // "10-02 20:30"
+      const s = formatBeijing(t);
+      return s ? s.slice(5) : String(t);
     };
     const homeText = (r) => {
       if (!r.team_a || !r.team_b) return '';
@@ -939,8 +735,14 @@ function renderRoomListBox(list, nameMap) {
 }
 
 /* ============================================================
-   添加赛程（上传 JSON 对阵表）
+   添加赛程（支持单淘汰 / 双淘汰 / 小组赛）
 ============================================================ */
+let __scheduleFormState = {
+  type: 'single',
+  parsed: null,   // 解析后的 Tournament 对象
+  raw: null       // 原始 JSON
+};
+
 async function loadScheduleTool(box) {
   let published = null;
   try {
@@ -951,27 +753,65 @@ async function loadScheduleTool(box) {
     return;
   }
 
+  __scheduleFormState.type = published?.type || 'single';
+  __scheduleFormState.parsed = published ? parseTournament(published.matches) : null;
+  __scheduleFormState.raw = null;
+
   box.innerHTML = `
     <h3 class="tool-modal__title">添加赛程 <em>ADMIN</em></h3>
-    <p class="tool-modal__sub">上传包含对阵的 JSON 文件，64 进 32 淘汰赛将立即发布到「比赛赛程」页。每场对阵为两个队伍简称。</p>
+    <p class="tool-modal__sub">支持单淘汰 / 双淘汰 / 小组赛。可上传 JSON，也可以手动填写队伍数自动生成骨架。</p>
 
     <section class="tool-modal__section">
-      <div class="tool-modal__section-head"><h4>上传对阵表</h4></div>
+      <div class="tool-modal__section-head"><h4>1. 选择赛制</h4></div>
+      <div class="schedule-type-tabs" id="schedTypeTabs" role="tablist">
+        <button class="schedule-type-tab ${__scheduleFormState.type === 'single' ? 'is-active' : ''}" data-type="single" type="button">
+          <span class="schedule-type-tab__icon">🏆</span>
+          <span class="schedule-type-tab__title">单淘汰</span>
+          <span class="schedule-type-tab__sub">输一场即淘汰</span>
+        </button>
+        <button class="schedule-type-tab ${__scheduleFormState.type === 'double' ? 'is-active' : ''}" data-type="double" type="button">
+          <span class="schedule-type-tab__icon">🔁</span>
+          <span class="schedule-type-tab__title">双淘汰</span>
+          <span class="schedule-type-tab__sub">胜者组 / 败者组</span>
+        </button>
+        <button class="schedule-type-tab ${__scheduleFormState.type === 'group' ? 'is-active' : ''}" data-type="group" type="button">
+          <span class="schedule-type-tab__icon">👥</span>
+          <span class="schedule-type-tab__title">小组赛</span>
+          <span class="schedule-type-tab__sub">分组循环</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>2. 填写赛程</h4></div>
       <div class="tool-form">
         <div class="tool-field">
           <label for="scheduleTitle">赛程标题</label>
-          <input type="text" id="scheduleTitle" placeholder="例如：64 进 32 淘汰赛" maxlength="30" value="64 进 32 淘汰赛">
+          <input type="text" id="scheduleTitle" placeholder="例如：2026 联合赛季 · 64 进 32" maxlength="40" value="${published?.title || ''}">
         </div>
+
+        <div class="tool-form__row">
+          <div class="tool-field">
+            <label for="scheduleTeamCount">参赛队伍数（自动生成轮次骨架）</label>
+            <input type="number" id="scheduleTeamCount" min="2" max="512" step="1" placeholder="例如：64">
+          </div>
+          <div class="tool-field" style="justify-content:end">
+            <button class="btn btn--ghost btn--sm" id="schedGenerateBtn" type="button">🪄 生成骨架</button>
+          </div>
+        </div>
+
         <div class="tool-field">
-          <label for="scheduleFile">JSON 文件（队伍简称对阵）</label>
+          <label for="scheduleFile">或上传 JSON 文件（自动识别赛制与轮次）</label>
           <input type="file" id="scheduleFile" accept=".json,application/json">
         </div>
+
         <p class="schedule-format-hint">
-          <b>JSON 格式示例：</b>
-          <code>{ "title":"64 进 32 淘汰赛", "matches":[ { "a":"hlkz", "b":"jczx" }, { "a":"hx", "b":"rest1" } ] }</code>
-          也支持 <code>{ "matches":[ ["hlkz","jczx"], ... ] }</code> 或扁平数组 <code>["hlkz","jczx", ...]</code>（两两一组）。队伍 Logo 自动按简称匹配。
+          <b>JSON 格式示例：</b><br>
+          <code>{ "type": "single", "rounds": [ { "name": "64 进 32", "matches": [{ "a":"hlkz","b":"jczx" }] }, { "name": "32 进 16", "matches": [...] } ] }</code><br>
+          也支持扁平数组 <code>[{ "a":"hlkz","b":"jczx","round":1 }, ...]</code>（带 round 自动分轮）或 <code>[{ "a":"hlkz","b":"jczx" }]</code>（视为第 1 轮）。
         </p>
       </div>
+
       <div class="tool-actions">
         <button class="btn btn--primary btn--sm" id="schedulePublishBtn" type="button">📤 发布赛程</button>
         <button class="btn btn--ghost btn--sm" id="scheduleClearBtn" type="button">清空赛程</button>
@@ -981,53 +821,159 @@ async function loadScheduleTool(box) {
 
     <section class="tool-modal__section">
       <div class="tool-modal__section-head">
+        <h4>3. 赛程预览</h4>
+        <span class="tool-modal__count" id="schedPreviewCount">—</span>
+      </div>
+      <div class="schedule-preview" id="schedPreview"></div>
+    </section>
+
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head">
         <h4>已发布赛程</h4>
-        <span class="tool-modal__count" id="scheduleCount">${published && published.matches ? published.matches.length : 0} 场</span>
+        <span class="tool-modal__count" id="scheduleCount">${published ? '已发布' : '未发布'}</span>
       </div>
       <div class="schedule-list" id="scheduleList"></div>
     </section>
   `;
 
-  renderScheduleListBox(published);
+  /* 赛制 tab 切换 */
+  document.querySelectorAll('#schedTypeTabs .schedule-type-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      __scheduleFormState.type = tab.dataset.type;
+      document.querySelectorAll('#schedTypeTabs .schedule-type-tab').forEach(t => {
+        t.classList.toggle('is-active', t === tab);
+      });
+    });
+  });
 
+  /* 生成骨架 */
+  document.getElementById('schedGenerateBtn').addEventListener('click', () => {
+    const n = Number(document.getElementById('scheduleTeamCount').value);
+    if (!Number.isInteger(n) || n < 2) { alert('请输入有效队伍数（≥ 2）'); return; }
+
+    let tournament;
+    if (__scheduleFormState.type === 'double') {
+      tournament = new DoubleElimination({ rounds: DoubleElimination.buildRounds(n) });
+    } else if (__scheduleFormState.type === 'group') {
+      /* 小组赛：均分成若干组，组内单循环 */
+      const groupCount = Math.max(1, Math.min(8, Math.floor(n / 4)) || 1);
+      const rounds = [];
+      const perGroup = Math.ceil(n / groupCount);
+      for (let g = 0; g < groupCount; g++) {
+        const teams = Array.from({ length: perGroup }, (_, i) => `Group${g + 1}-${i + 1}`);
+        const matches = [];
+        for (let i = 0; i < teams.length; i++) {
+          for (let j = i + 1; j < teams.length; j++) {
+            matches.push({ a: teams[i], b: teams[j] });
+          }
+        }
+        rounds.push({
+          index: g + 1,
+          name: `第 ${g + 1} 组`,
+          fromCount: teams.length,
+          toCount: 2,
+          bracket: 'group',
+          matches
+        });
+      }
+      tournament = new GroupStage({
+        rounds,
+        groups: Array.from({ length: groupCount }, (_, i) => ({ name: `第 ${i + 1} 组` }))
+      });
+    } else {
+      tournament = new SingleElimination({ rounds: SingleElimination.buildRounds(n) });
+    }
+
+    __scheduleFormState.parsed = tournament;
+    renderSchedulePreview();
+    document.getElementById('scheduleMsg').textContent = `✅ 已生成骨架，请填写对阵后点「发布赛程」`;
+  });
+
+  /* 上传文件 */
   const fileInput = document.getElementById('scheduleFile');
   const msg = document.getElementById('scheduleMsg');
-  let parsedFile = null;
 
   fileInput.addEventListener('change', () => {
     const file = fileInput.files && fileInput.files[0];
-    if (!file) { parsedFile = null; msg.textContent = '未选择文件'; return; }
+    if (!file) { __scheduleFormState.parsed = null; msg.textContent = '未选择文件'; renderSchedulePreview(); return; }
 
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        parsedFile = parseScheduleJson(e.target.result);
-        msg.textContent = `已解析：${parsedFile.matches.length} 场对阵，标题「${parsedFile.title}」。点击「发布赛程」即可生效。`;
+        const raw = JSON.parse(e.target.result);
+        const t = buildTournamentFromRaw(raw, '赛程');
+        if (!t) throw new Error('无法识别赛程格式');
+        __scheduleFormState.parsed = t;
+        __scheduleFormState.raw = raw;
+        if (raw && !Array.isArray(raw) && raw.type) {
+          __scheduleFormState.type = raw.type;
+          document.querySelectorAll('#schedTypeTabs .schedule-type-tab').forEach(tab => {
+            tab.classList.toggle('is-active', tab.dataset.type === raw.type);
+          });
+        }
+        if (raw && !Array.isArray(raw) && raw.title) {
+          const titleInput = document.getElementById('scheduleTitle');
+          if (!titleInput.value.trim()) titleInput.value = raw.title;
+        }
+        msg.textContent = `✅ 已解析：${t.typeLabel} · ${t.totalRounds} 轮 · ${t.allMatches.length} 场`;
+        renderSchedulePreview();
       } catch (err) {
-        parsedFile = null;
+        __scheduleFormState.parsed = null;
         msg.textContent = '解析失败：' + err.message;
+        renderSchedulePreview();
       }
     };
-    reader.onerror = () => { parsedFile = null; msg.textContent = '文件读取失败'; };
+    reader.onerror = () => { __scheduleFormState.parsed = null; msg.textContent = '文件读取失败'; };
     reader.readAsText(file, 'utf-8');
   });
 
+  /* 发布 */
   document.getElementById('schedulePublishBtn').addEventListener('click', async () => {
-    if (!parsedFile) { alert('请先选择并解析有效的 JSON 文件'); return; }
+    const t = __scheduleFormState.parsed;
+    if (!t) { alert('请先上传 JSON 或生成骨架'); return; }
+
+    for (const r of t.rounds) {
+      for (const m of r.matches) {
+        if (!m.a || !m.b) {
+          alert(`第 ${r.index} 轮（${r.name}）存在空对阵，请补全`);
+          return;
+        }
+      }
+    }
+
     const btn = document.getElementById('schedulePublishBtn');
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = '发布中…';
+
     try {
-      const title = (document.getElementById('scheduleTitle').value || '').trim() || parsedFile.title;
+      const title = (document.getElementById('scheduleTitle').value || '').trim() || t.title || '赛程';
+      const payload = {
+        title,
+        type: __scheduleFormState.type,
+        matches: {
+          type: __scheduleFormState.type,
+          rounds: t.rounds.map(r => ({
+            index: r.index,
+            name: r.name,
+            fromCount: r.fromCount,
+            toCount: r.toCount,
+            bracket: r.bracket,
+            matches: r.matches.map(m => ({ a: m.a, b: m.b }))
+          }))
+        }
+      };
+
       await apiRequest('/api/schedule', {
         method: 'POST',
-        body: JSON.stringify({ title, matches: parsedFile.matches })
+        body: JSON.stringify(payload)
       });
-      msg.textContent = '✅ 发布成功，比赛赛程页已更新。';
+
+      msg.textContent = '✅ 发布成功';
+      showActionNotice('赛程已发布');
       const data = await apiRequest('/api/schedule');
       renderScheduleListBox(data.schedule);
-      document.getElementById('scheduleCount').textContent = data.schedule.matches.length + ' 场';
+      document.getElementById('scheduleCount').textContent = '已发布';
       if (window.app?.loadSchedule) window.app.loadSchedule();
     } catch (err) {
       alert('发布失败：' + err.message);
@@ -1037,90 +983,99 @@ async function loadScheduleTool(box) {
     }
   });
 
+  /* 清空 */
   document.getElementById('scheduleClearBtn').addEventListener('click', async () => {
-    if (!confirm('确定要清空当前赛程吗？比赛赛程页将显示「赛程尚未发布」。')) return;
+    if (!confirm('确定要清空当前赛程吗？')) return;
     try {
       await apiRequest('/api/schedule', { method: 'DELETE' });
+      __scheduleFormState.parsed = null;
+      renderSchedulePreview();
       renderScheduleListBox(null);
-      document.getElementById('scheduleCount').textContent = '0 场';
+      document.getElementById('scheduleCount').textContent = '未发布';
       document.getElementById('scheduleMsg').textContent = '已清空赛程。';
       if (window.app?.loadSchedule) window.app.loadSchedule();
     } catch (err) {
       alert('清空失败：' + err.message);
     }
   });
+
+  renderScheduleListBox(published);
+  renderSchedulePreview();
 }
 
-/* 解析上传的赛程 JSON，兼容多种格式 */
-function parseScheduleJson(text) {
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error('不是合法的 JSON 文本');
+/* 赛程预览 */
+function renderSchedulePreview() {
+  const box = document.getElementById('schedPreview');
+  const count = document.getElementById('schedPreviewCount');
+  if (!box) return;
+
+  const t = __scheduleFormState.parsed;
+  if (!t) {
+    box.innerHTML = '<div class="tool-list__empty">尚未生成或上传赛程</div>';
+    if (count) count.textContent = '—';
+    return;
   }
 
-  let title = '';
-  let raw = null;
+  if (count) count.textContent = `${t.typeLabel} · ${t.totalRounds} 轮 · ${t.allMatches.length} 场`;
 
-  if (Array.isArray(data)) {
-    raw = data;
-  } else if (data && typeof data === 'object') {
-    title = String(data.title || data.round || '').trim();
-    if (Array.isArray(data.matches)) raw = data.matches;
-    else if (Array.isArray(data.groups)) raw = data.groups;
-    else if (Array.isArray(data.pairs)) raw = data.pairs;
-  }
-
-  if (!Array.isArray(raw)) throw new Error('JSON 中找不到对阵数组（matches / groups / pairs）');
-
-  const matches = [];
-  raw.forEach(m => {
-    if (Array.isArray(m)) {
-      matches.push({ a: String(m[0] || '').trim(), b: String(m[1] || '').trim() });
-    } else if (typeof m === 'string') {
-      matches.push({ a: m.trim(), b: '' });
-    } else if (m && typeof m === 'object') {
-      matches.push({
-        a: String(m.a ?? m.home ?? m.t1 ?? m.team1 ?? '').trim(),
-        b: String(m.b ?? m.away ?? m.t2 ?? m.team2 ?? '').trim()
-      });
-    }
-  });
-
-  if (matches.some(p => !p.b)) {
-    const flat = matches.map(p => p.a);
-    const paired = [];
-    for (let i = 0; i < flat.length; i += 2) {
-      paired.push({ a: flat[i] || '', b: flat[i + 1] || '' });
-    }
-    matches.length = 0;
-    matches.push(...paired);
-  }
-
-  const cleaned = matches.filter(p => p.a || p.b);
-  if (!cleaned.length) throw new Error('没有解析到任何对阵');
-
-  return { title: title || '64 进 32 淘汰赛', matches: cleaned };
+  box.innerHTML = t.rounds.map(r => `
+    <div class="sched-preview-round">
+      <div class="sched-preview-round__head">
+        <span class="sched-preview-round__index">第 ${r.index} 轮</span>
+        <span class="sched-preview-round__name">${sanitize(r.name)}</span>
+        <span class="sched-preview-round__count">${r.matches.length} 场</span>
+      </div>
+      <div class="sched-preview-round__list">
+        ${r.matches.map((m, i) => `
+          <div class="sched-preview-pair">
+            <span class="sched-preview-pair__no">${i + 1}</span>
+            <span class="sched-preview-pair__team">${sanitize(m.a || '待定')}</span>
+            <span class="sched-preview-pair__vs">VS</span>
+            <span class="sched-preview-pair__team">${sanitize(m.b || '待定')}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
 }
 
 function renderScheduleListBox(schedule) {
   const box = document.getElementById('scheduleList');
   if (!box) return;
-  const list = schedule && schedule.matches ? schedule.matches : [];
-  if (!list.length) {
+
+  if (!schedule || !schedule.matches) {
     box.innerHTML = '<div class="tool-list__empty">尚未发布赛程</div>';
     return;
   }
+
+  const t = parseTournament(schedule.matches);
+  if (!t) {
+    box.innerHTML = '<div class="tool-list__empty">赛程数据异常</div>';
+    return;
+  }
+
   box.innerHTML = `
-    <div class="schedule-list__head">${sanitize(schedule.title || '64 进 32 淘汰赛')}</div>
-    <div class="schedule-list__grid">
-      ${list.map((p, i) => `
-        <div class="schedule-list__pair">
-          <span class="schedule-list__no">${String(i + 1).padStart(2, '0')}</span>
-          <span class="schedule-list__team">${sanitize(p.a || '轮空')}</span>
-          <span class="schedule-list__vs">VS</span>
-          <span class="schedule-list__team">${sanitize(p.b || '轮空')}</span>
+    <div class="schedule-list__head">
+      ${sanitize(schedule.title || '赛程')}
+      <span class="schedule-list__type">${t.typeLabel}</span>
+      <span class="schedule-list__meta">${t.totalRounds} 轮 · ${t.allMatches.length} 场</span>
+    </div>
+    <div class="schedule-list__rounds">
+      ${t.rounds.map(r => `
+        <div class="schedule-list__round">
+          <div class="schedule-list__round-title">
+            第 ${r.index} 轮 · ${sanitize(r.name)} · ${r.matches.length} 场
+          </div>
+          <div class="schedule-list__grid">
+            ${r.matches.map((p, i) => `
+              <div class="schedule-list__pair">
+                <span class="schedule-list__no">${String(i + 1).padStart(2, '0')}</span>
+                <span class="schedule-list__team">${sanitize(p.a || '轮空')}</span>
+                <span class="schedule-list__vs">VS</span>
+                <span class="schedule-list__team">${sanitize(p.b || '轮空')}</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
       `).join('')}
     </div>
@@ -1158,17 +1113,25 @@ async function loadMatchBookingTool(box) {
   }
 
   if (!isAdmin && !profile?.school) {
-    box.innerHTML = '<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">请先在“绑定学校”中绑定自己的学校，再提交比赛时间。</div>';
+    box.innerHTML = '<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">请先在"绑定学校"中绑定自己的学校，再提交比赛时间。</div>';
     return;
   }
-  if (!schedule?.matches?.length) {
+  if (!schedule || !schedule.matches) {
+    box.innerHTML = '<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">当前还没有已发布的比赛赛程。</div>';
+    return;
+  }
+
+  const tournament = parseTournament(schedule.matches);
+  const flatMatches = tournament ? tournament.allMatches : (Array.isArray(schedule.matches) ? schedule.matches : []);
+
+  if (!flatMatches.length) {
     box.innerHTML = '<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">当前还没有已发布的比赛赛程。</div>';
     return;
   }
 
   const school = profile?.school || null;
   const teamNames = Object.fromEntries(teams.map(team => [team.short, team.name || team.short]));
-  const choices = schedule.matches.map((match, index) => ({ match, index }))
+  const choices = flatMatches.map((match, index) => ({ match, index }))
     .filter(({ match }) => !!match.a && !!match.b && (isAdmin || match.a === school || match.b === school));
   if (!choices.length) {
     box.innerHTML = `<h3 class="tool-modal__title">约赛 <em>TEAM</em></h3><div class="tool-modal__info">当前赛程中${isAdmin ? '没有可约的对阵' : `没有 ${sanitize(school)} 所在的对阵`}。</div>`;
@@ -1192,11 +1155,11 @@ async function loadMatchBookingTool(box) {
   const syncFields = () => {
     const matchIndex = Number(matchSelect.value);
     const appointment = appointmentByIndex.get(matchIndex);
-    const selected = schedule.matches[matchIndex];
+    const selected = flatMatches[matchIndex];
     const schoolSelect = box.querySelector('#bookingSchool');
     if (schoolSelect && selected) {
-      const choices = [selected.a, selected.b].map(short => `<option value="${sanitize(short)}">${sanitize(teamNames[short] || short)}</option>`).join('');
-      schoolSelect.innerHTML = choices;
+      const choicesHtml = [selected.a, selected.b].map(short => `<option value="${sanitize(short)}">${sanitize(teamNames[short] || short)}</option>`).join('');
+      schoolSelect.innerHTML = choicesHtml;
       schoolSelect.value = appointment?.booked_by_school && [selected.a, selected.b].includes(appointment.booked_by_school)
         ? appointment.booked_by_school
         : selected.a;
@@ -1204,7 +1167,6 @@ async function loadMatchBookingTool(box) {
     const timeInput = box.querySelector('#bookingTime');
     const notesInput = box.querySelector('#bookingNotes');
     if (!appointment) { timeInput.value = ''; notesInput.value = ''; return; }
-    /* 回显：把存储的 ISO 时间转成北京时间，填入 datetime-local */
     timeInput.value = beijingLocalFromISO(appointment.start_time);
     notesInput.value = appointment.notes || '';
   };
@@ -1226,7 +1188,6 @@ async function loadMatchBookingTool(box) {
           schedule_id: schedule.id,
           match_index: Number(matchSelect.value),
           ...(isAdmin ? { booked_by_school: box.querySelector('#bookingSchool').value } : {}),
-          /* 提交：把 datetime-local 值标上 +08:00，避免后端按 UTC 解析 */
           start_time: beijingISOFromLocal(box.querySelector('#bookingTime').value),
           notes: box.querySelector('#bookingNotes').value
         })
@@ -1251,7 +1212,6 @@ async function loadBindSchoolTool(box) {
   const u = getCurrentUser();
   const isAdmin = u && u.role === 'admin';
 
-  /* 拉取学校列表 + 当前绑定 —— 学校列表复用缓存 */
   let schools = [];
   let current = null;
   try {
@@ -1272,7 +1232,7 @@ async function loadBindSchoolTool(box) {
 
   box.innerHTML = `
     <h3 class="tool-modal__title">绑定学校 <em>TEAM</em></h3>
-    <p class="tool-modal__sub">选择你的队伍学校并绑定。绑定后才能提交选手名单。</p>
+    <p class="tool-modal__sub">选择你的队伍学校并绑定。绑定后即可在「队伍信息 → 我的队伍」维护选手名单。</p>
     ${current ? `<div class="tool-modal__info">当前已绑定：<b>${sanitize(current.school)}</b></div>` : ''}
     <section class="tool-modal__section">
       <div class="tool-modal__section-head"><h4>选择学校</h4></div>
@@ -1299,7 +1259,7 @@ async function loadBindSchoolTool(box) {
     try {
       await apiRequest('/api/team/school', { method: 'POST', body: JSON.stringify({ school }) });
       const msg = document.getElementById('bindSchoolMsg');
-      msg.innerHTML = '✅ 已绑定学校：<b>' + sanitize(school) + '</b>，现在可以去「提交选手名单」。';
+      msg.innerHTML = '✅ 已绑定学校：<b>' + sanitize(school) + '</b>，现在可以去「队伍信息 → 我的队伍」维护选手名单。';
       const currentUser = getCurrentUser();
       if (currentUser?.role === 'team') teamSchoolCache.set(currentUser.phone, true);
       if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
@@ -1313,187 +1273,8 @@ async function loadBindSchoolTool(box) {
 }
 
 /* ============================================================
-   提交选手名单（队伍队长 / 管理员查看）
+   通用的选手列表渲染（被"比赛房间"复用）
 ============================================================ */
-const PLAYER_POSITIONS = ['求生', '监管', '双边'];
-
-async function loadTeamPlayersTool(box) {
-  const u = getCurrentUser();
-  const isAdmin = u && u.role === 'admin';
-  let currentSchool = null;
-
-  try {
-    const p = await apiRequest('/api/team/school').catch(() => ({}));
-    currentSchool = (p.profile && p.profile.school) || null;
-  } catch (e) {}
-
-  /* 管理员：拉取学校列表用于查看任意学校 —— 复用缓存 */
-  let schools = [];
-  if (isAdmin) {
-    try { schools = (await fetchTeams()).teams || []; } catch (e) {}
-  }
-
-  const posOpts = PLAYER_POSITIONS.map(v => `<option value="${v}">${v}</option>`).join('');
-
-  box.innerHTML = `
-    <h3 class="tool-modal__title">选手名单 <em>TEAM</em></h3>
-    <p class="tool-modal__sub">${isAdmin ? '管理员可查看各学校已提交的名单。' : '提交你的队伍选手：选手填 uid+名字+位置（求生/监管/双边），教练只需名字。'}</p>
-
-    ${isAdmin ? `
-      <section class="tool-modal__section">
-        <div class="tool-modal__section-head"><h4>查看某学校名单</h4></div>
-        <div class="tool-form">
-          <div class="tool-field">
-            <label for="adminViewSchool">选择学校</label>
-            <select id="adminViewSchool">
-              <option value="">-- 全部学校 --</option>
-              ${schools.map(s => `<option value="${sanitize(s.short)}">${sanitize(s.name)}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-      </section>
-    ` : (currentSchool ? `<div class="tool-modal__info">当前学校：<b>${sanitize(currentSchool)}</b></div>` : '<div class="tool-modal__info" style="color:#ffb3c0">⚠ 尚未绑定学校，请先在「绑定学校」中绑定。</div>')}
-
-    ${!isAdmin && !currentSchool ? '' : `
-    <section class="tool-modal__section">
-      <div class="tool-modal__section-head">
-        <h4>${isAdmin ? '名单列表' : '提交名单'}</h4>
-        ${isAdmin ? '' : '<span class="tool-modal__count">可多行添加选手</span>'}
-      </div>
-      <div id="playersEditArea"></div>
-    </section>
-    `}
-  `;
-
-  if (isAdmin) {
-    const viewSel = document.getElementById('adminViewSchool');
-    const area = document.getElementById('playersEditArea');
-    const loadList = async () => {
-      const school = viewSel.value;
-      try {
-        const q = school ? '?school=' + encodeURIComponent(school) : '';
-        const data = await apiRequest('/api/team/players' + q);
-        area.innerHTML = renderPlayersList(data.players || [], data.school || null);
-      } catch (err) {
-        area.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
-      }
-    };
-    viewSel.addEventListener('change', loadList);
-    loadList();
-    return;
-  }
-
-  /* 队长：提交表单 */
-  const area = document.getElementById('playersEditArea');
-  const getRows = () => area.querySelectorAll('.player-row');
-  const renderEdit = (rows) => {
-    const list = rows.map((r, i) => `
-      <div class="player-row" data-i="${i}">
-        <div class="player-row__head">
-          <span class="player-row__label">选手 ${i + 1}</span>
-          <button type="button" class="player-row__del" data-del="${i}" aria-label="删除">✕</button>
-        </div>
-        <div class="tool-form__row">
-          <div class="tool-field"><label>名字</label><input type="text" class="pp-name" maxlength="20" value="${sanitize(r.name || '')}"></div>
-          <div class="tool-field"><label>UID</label><input type="text" class="pp-uid" maxlength="20" value="${sanitize(r.uid || '')}"></div>
-          <div class="tool-field"><label>位置</label><select class="pp-pos">${posOpts}</select></div>
-        </div>
-      </div>
-    `).join('');
-    const coachHtml = `
-      <div class="player-row player-row--coach">
-        <div class="player-row__head">
-          <span class="player-row__label">教练（无需 UID）</span>
-        </div>
-        <div class="tool-form__row">
-          <div class="tool-field"><label>教练名字</label><input type="text" id="coachName" maxlength="20" value="${sanitize(rows.length ? '' : '')}"></div>
-        </div>
-      </div>`;
-    area.innerHTML = list + coachHtml;
-    /* 回填位置选中 */
-    area.querySelectorAll('.pp-pos').forEach((sel, i) => { if (rows[i]) sel.value = rows[i].position || '求生'; });
-    /* 教练回填 */
-    const coachEl = document.getElementById('coachName');
-    /* 行删除 */
-    area.querySelectorAll('.player-row__del').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const idx = Number(btn.dataset.del);
-        const cur = collectRows();
-        cur.splice(idx, 1);
-        renderEdit(cur);
-      });
-    });
-  };
-  const collectRows = () => {
-    return Array.from(getRows()).map(row => ({
-      name: (row.querySelector('.pp-name')?.value || '').trim(),
-      uid: (row.querySelector('.pp-uid')?.value || '').trim(),
-      position: row.querySelector('.pp-pos')?.value || '求生'
-    }));
-  };
-
-  /* 默认：4 求生 + 1 监管 */
-  const defaultRows = () => [
-    { name:'', uid:'', position:'求生' }, { name:'', uid:'', position:'求生' },
-    { name:'', uid:'', position:'求生' }, { name:'', uid:'', position:'求生' },
-    { name:'', uid:'', position:'监管' }
-  ];
-  /* 初始：加载当前已提交名单填充；无则用默认行 */
-  if (currentSchool) {
-    try {
-      const d = await apiRequest('/api/team/players');
-      const list = (d.players || []).filter(x => !x.is_coach).map(x => ({ name: x.name, uid: x.uid || '', position: x.position || '求生' }));
-      const coach = (d.players || []).find(x => x.is_coach);
-      area.innerHTML = '';
-      renderEdit(list.length ? list : defaultRows());
-      if (coach) document.getElementById('coachName').value = coach.name || '';
-    } catch (e) { renderEdit(defaultRows()); }
-  } else {
-    renderEdit(defaultRows());
-  }
-
-  area.insertAdjacentHTML('afterend', `
-    <div class="tool-actions">
-      <button class="btn btn--ghost btn--sm" id="addPlayerBtn" type="button">+ 添加选手</button>
-      <button class="btn btn--primary btn--sm" id="savePlayersBtn" type="button">💾 提交名单</button>
-    </div>
-    <p class="draw-info" id="playersMsg"></p>
-  `);
-
-  document.getElementById('addPlayerBtn').addEventListener('click', () => {
-    const cur = collectRows();
-    cur.push({ name: '', uid: '', position: '求生' });
-    renderEdit(cur);
-  });
-
-  document.getElementById('savePlayersBtn').addEventListener('click', async () => {
-    const rows = collectRows().filter(r => r.name || r.uid);
-    const coachName = (document.getElementById('coachName')?.value || '').trim();
-    if (!rows.length && !coachName) { alert('请至少添加一名选手或教练'); return; }
-    for (const r of rows) {
-      if (!r.name) { alert('选手名字不能为空'); return; }
-      if (!r.uid) { alert('选手 UID 不能为空'); return; }
-    }
-    const btn = document.getElementById('savePlayersBtn');
-    const original = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '提交中…';
-    try {
-      const data = await apiRequest('/api/team/players', {
-        method: 'POST',
-        body: JSON.stringify({ players: rows, coach: coachName ? { name: coachName } : null })
-      });
-      const msg = document.getElementById('playersMsg');
-      msg.innerHTML = '✅ 已提交：选手 ' + data.players + ' 人' + (data.coach ? '，教练 ' + sanitize(data.coach) : '') + '。';
-    } catch (err) {
-      alert('提交失败：' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = original;
-    }
-  });
-}
-
 function renderPlayersList(list, school) {
   if (!list || !list.length) {
     return '<div class="tool-list__empty">' + (school ? '该校尚未提交名单' : '尚未有任何队伍提交名单') + '</div>';

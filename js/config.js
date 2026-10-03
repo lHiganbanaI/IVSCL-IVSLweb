@@ -16,9 +16,7 @@ export const ROLE_LABELS = {
   admin: '管理员',
   team:  '队伍队长',
   judge: '裁判',
-  staff: '工作人员',
-  commentator: '解说',
-  fan:   '观众'
+  commentator: '解说'
 };
 
 export const THANKS_SUB_MAP = {
@@ -76,7 +74,7 @@ export const DEFAULT_THANKS = [
 
 /* ============================================================
    页面功能工具定义
-   顺序：公共 → 裁判 → 解说 → 管理员
+   顺序：公共 → 裁判 → 管理员 → 队伍
 ============================================================ */
 export const TOOLS_DEF = [
   {
@@ -101,7 +99,7 @@ export const TOOLS_DEF = [
     section: 'admin',
     icon: '📢',
     title: '公告栏管理',
-    desc: '新增或删除官方公告，修改后立即生效',
+    desc: '新增或删除官方公告，支持置顶与日期',
     roles: ['admin']
   },
   {
@@ -109,7 +107,7 @@ export const TOOLS_DEF = [
     section: 'admin',
     icon: '🛡️',
     title: '队伍管理',
-    desc: '报名期间增加或减少参赛队伍',
+    desc: '查看各校队伍 Logo、选手名单详情',
     roles: ['admin']
   },
   {
@@ -120,12 +118,12 @@ export const TOOLS_DEF = [
     desc: '为当前参赛队伍随机生成对阵表',
     roles: ['admin']
   },
-  {
+    {
     id: 'schedule',
     section: 'admin',
     icon: '🗓️',
     title: '添加赛程',
-    desc: '上传 JSON 对阵表，64 进 32 淘汰赛立即发布到比赛赛程页',
+    desc: '发布单淘汰 / 双淘汰 / 小组赛赛程，自动识别轮次',
     roles: ['admin']
   },
   {
@@ -135,15 +133,6 @@ export const TOOLS_DEF = [
     title: '绑定学校',
     desc: '绑定你的队伍学校（队长，从学校列表选择）',
     roles: ['team', 'admin']
-  },
-  {
-    id: 'teamPlayers',
-    section: 'team',
-    icon: '👥',
-    title: '提交选手名单',
-    desc: '提交求生/监管/双边选手与教练名单（教练无需 uid）',
-    roles: ['team', 'admin'],
-    requiresSchool: true
   },
   {
     id: 'matchBooking',

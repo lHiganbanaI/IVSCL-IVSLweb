@@ -8,7 +8,7 @@ import inviteCodesData from '../data/invite-codes.json';
 const DASHBOARD_TABLES = {
   users: { label: '用户', primaryKey: 'id', columns: ['id', 'username', 'phone', 'role', 'created_at'], writable: false },
   invite_codes: { label: '激活码', primaryKey: 'code', columns: ['code', 'role', 'label', 'used', 'used_by'], writable: false },
-  announcements: { label: '公告', primaryKey: 'id', columns: ['id', 'tag', 'tag_class', 'time', 'text', 'created_at'], writable: true },
+  announcements: { label: '公告', primaryKey: 'id', columns: ['id', 'tag', 'tag_class', 'time', 'text', 'is_pinned', 'created_at'], writable: true },
   teams: { label: '队伍', primaryKey: 'id', columns: ['id', 'name', 'short', 'logo', 'created_at'], writable: true },
   rooms: { label: '比赛房间', primaryKey: 'id', columns: ['id', 'code', 'password', 'title', 'creator', 'created_at', 'start_time', 'team_a', 'team_b', 'home'], writable: true },
   schedule: { label: '赛程', primaryKey: 'id', columns: ['id', 'title', 'matches', 'created_at'], writable: true },
@@ -145,10 +145,10 @@ export default {
         return json({ staff: result.results || [] }, corsHeaders);
       }
 
-      if (path === '/api/announcements') {
+            if (path === '/api/announcements') {
         if (method === 'GET') {
           const result = await env.DB.prepare(
-            'SELECT * FROM announcements ORDER BY id DESC'
+            'SELECT * FROM announcements ORDER BY is_pinned DESC, id DESC'
           ).all();
           return json({ announcements: result.results || [] }, corsHeaders);
         }
@@ -159,21 +159,37 @@ export default {
             return json({ error: '无权访问' }, corsHeaders, 403);
           }
 
-          const { tag, tagClass, time, text } = await request.json();
+          const { tag, tagClass, time, text, isPinned } = await request.json();
           if (!text) return json({ error: '正文不能为空' }, corsHeaders, 400);
 
           const info = await env.DB.prepare(
-            'INSERT INTO announcements (tag, tag_class, time, text, created_at) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO announcements (tag, tag_class, time, text, is_pinned, created_at) VALUES (?, ?, ?, ?, ?, ?)'
           ).bind(
-            tag || '公告',
-            tagClass || 'tag--notice',
-            time || '今天',
+            tag || '动态',
+            tagClass || 'tag--event',
+            time || '',
             text,
+            isPinned ? 1 : 0,
             new Date().toISOString()
           ).run();
 
           return json({ id: info.meta.last_row_id }, corsHeaders);
         }
+      }
+
+      /* 公告置顶切换 */
+      const annPinPath = path.match(/^\/api\/announcements\/(\d+)\/pin$/);
+      if (annPinPath && method === 'PATCH') {
+        const user = await verifyToken(request, env);
+        if (!user || user.role !== 'admin') {
+          return json({ error: '无权访问' }, corsHeaders, 403);
+        }
+        const body = await request.json();
+        const update = await env.DB.prepare(
+          'UPDATE announcements SET is_pinned = ? WHERE id = ?'
+        ).bind(body.is_pinned ? 1 : 0, Number(annPinPath[1])).run();
+        if (!update.meta.changes) return json({ error: '公告不存在' }, corsHeaders, 404);
+        return json({ ok: true, is_pinned: !!body.is_pinned }, corsHeaders);
       }
 
       if (path.startsWith('/api/announcements/') && method === 'DELETE') {
@@ -478,49 +494,145 @@ export default {
          赛事赛程
       ============================================================ */
 
-      if (path === '/api/schedule') {
+            if (path === '/api/schedule') {
+        /* ---------- GET ---------- */
         if (method === 'GET') {
           const result = await env.DB.prepare(
             'SELECT * FROM schedule ORDER BY id DESC LIMIT 1'
           ).first();
           if (!result) return json({ schedule: null }, corsHeaders);
 
-          let matches = [];
-          try { matches = JSON.parse(result.matches); } catch (e) {}
+          let payload = null;
+          try { payload = JSON.parse(result.matches); } catch (e) {}
 
-          return json({ schedule: { id: result.id, title: result.title || '', matches, created_at: result.created_at } }, corsHeaders);
+          /* payload 可能是：
+             - 数组 [{a,b}, ...]                    → 旧数据
+             - 对象 {type, rounds: [...]}            → 新数据
+          */
+          let type = 'single';
+          if (payload && !Array.isArray(payload) && payload.type) {
+            type = payload.type;
+          }
+
+          return json({
+            schedule: {
+              id: result.id,
+              title: result.title || '',
+              type,
+              matches: payload,
+              created_at: result.created_at
+            }
+          }, corsHeaders);
         }
 
+        /* ---------- POST ---------- */
         if (method === 'POST') {
           const user = await verifyToken(request, env);
           if (!user || user.role !== 'admin') {
             return json({ error: '无权访问' }, corsHeaders, 403);
           }
 
-          const { title, matches } = await request.json();
-          if (!Array.isArray(matches) || !matches.length) {
-            return json({ error: '对阵数据不能为空' }, corsHeaders, 400);
-          }
+          const body = await request.json();
+          const { title, type, matches } = body;
 
-          const pairs = matches.map(m => {
-            if (Array.isArray(m)) return { a: String(m[0] || '').trim(), b: String(m[1] || '').trim() };
-            return {
-              a: String(m.a ?? m.home ?? m.t1 ?? '').trim(),
-              b: String(m.b ?? m.away ?? m.t2 ?? '').trim()
+          if (!matches) return json({ error: '赛程数据不能为空' }, corsHeaders, 400);
+
+          let payload;
+
+          /* 情况1：管理员上传的结构化数据 { type, rounds: [...] } */
+          if (matches && typeof matches === 'object' && !Array.isArray(matches) && Array.isArray(matches.rounds)) {
+            payload = {
+              type: matches.type || type || 'single',
+              rounds: matches.rounds
             };
-          });
+          }
+          /* 情况2：扁平数组（可带 round 字段） */
+          else if (Array.isArray(matches)) {
+            const hasRound = matches.some(m => m && typeof m === 'object' && m.round != null);
 
-          if (pairs.some(p => !p.a)) {
-            return json({ error: '存在空队伍简称，请检查 JSON 格式' }, corsHeaders, 400);
+            if (!hasRound) {
+              /* 全部当作第一轮 */
+              const pairs = matches.map(m => {
+                if (Array.isArray(m)) return { a: String(m[0] || '').trim(), b: String(m[1] || '').trim() };
+                return {
+                  a: String(m?.a ?? m?.home ?? '').trim(),
+                  b: String(m?.b ?? m?.away ?? '').trim()
+                };
+              }).filter(p => p.a || p.b);
+
+              if (!pairs.length) return json({ error: '没有解析到任何对阵' }, corsHeaders, 400);
+
+              payload = {
+                type: 'single',
+                rounds: [{
+                  index: 1,
+                  name: `${pairs.length * 2} 进 ${pairs.length}`,
+                  fromCount: pairs.length * 2,
+                  toCount: pairs.length,
+                  bracket: 'main',
+                  matches: pairs
+                }]
+              };
+            } else {
+              /* 按 round 字段分组 */
+              const grouped = new Map();
+              matches.forEach(m => {
+                const r = Number(m.round) || 1;
+                if (!grouped.has(r)) grouped.set(r, []);
+                grouped.get(r).push({
+                  a: String(m.a || '').trim(),
+                  b: String(m.b || '').trim()
+                });
+              });
+              const sortedKeys = [...grouped.keys()].sort((a, b) => a - b);
+              const rounds = sortedKeys.map((key, i) => {
+                const list = grouped.get(key);
+                return {
+                  index: i + 1,
+                  name: `${list.length * 2} 进 ${list.length}`,
+                  fromCount: list.length * 2,
+                  toCount: list.length,
+                  bracket: 'main',
+                  matches: list
+                };
+              });
+              payload = { type: type || 'single', rounds };
+            }
+          }
+          else {
+            return json({ error: '赛程数据格式错误' }, corsHeaders, 400);
           }
 
+          /* 校验：每场比赛必须 a、b 齐全 */
+          for (const r of payload.rounds) {
+            if (!Array.isArray(r.matches)) {
+              return json({ error: '第 ' + r.index + ' 轮 matches 不是数组' }, corsHeaders, 400);
+            }
+            for (const m of r.matches) {
+              if (!m.a || !m.b) {
+                return json({ error: `第 ${r.index} 轮存在不完整对阵（缺 a 或 b）` }, corsHeaders, 400);
+              }
+            }
+          }
+
+          const now = new Date().toISOString();
           const info = await env.DB.prepare(
             'INSERT INTO schedule (title, matches, created_at) VALUES (?, ?, ?)'
-          ).bind(title || '64 进 32 淘汰赛', JSON.stringify(pairs), new Date().toISOString()).run();
+          ).bind(
+            title || '赛程',
+            JSON.stringify(payload),
+            now
+          ).run();
 
-          return json({ id: info.meta.last_row_id, title: title || '64 进 32 淘汰赛', pairs, created_at: new Date().toISOString() }, corsHeaders);
+          return json({
+            id: info.meta.last_row_id,
+            ok: true,
+            type: payload.type,
+            roundsCount: payload.rounds.length
+          }, corsHeaders);
         }
 
+        /* ---------- DELETE ---------- */
         if (method === 'DELETE') {
           const user = await verifyToken(request, env);
           if (!user || user.role !== 'admin') {

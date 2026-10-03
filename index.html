@@ -63,15 +63,6 @@
 <main>
 
   <section class="panel is-active" data-panel="home">
-    <div class="notice-bar">
-      <div class="wrap notice-bar__inner">
-        <span aria-hidden="true">📢</span>
-        <b>最新公告：</b>
-        <span>本届赛事正在火热报名中，开赛日期 2026 年 10 月 1 日</span>
-        <span class="notice-bar__more" data-goto="schedule">了解详情 →</span>
-      </div>
-    </div>
-
     <div class="wrap">
       <div class="hero-board">
         <h1 class="hero-board__title">赛事公告墙</h1>
@@ -79,30 +70,27 @@
       </div>
 
       <div class="stage">
-        <div class="stage__left">
+                <div class="stage__left">
+          <!-- Pane 1: 今日赛程 -->
           <div class="pane">
-            <div class="pane__head">开赛信息 <i>KICK-OFF</i></div>
-            <p class="kickoff__time">2026 年 <b>10 月 1 日</b> 10:00 主舞台揭幕</p>
-            <div class="countdown" id="countdown" data-target="2026-10-01T10:00:00+08:00" role="timer" aria-label="距开赛倒计时">
-              <div class="cd"><b data-unit="days">--</b><span>天</span></div>
-              <div class="cd"><b data-unit="hours">--</b><span>时</span></div>
-              <div class="cd"><b data-unit="minutes">--</b><span>分</span></div>
-              <div class="cd"><b data-unit="seconds">--</b><span>秒</span></div>
-            </div>
+            <div class="pane__head">今日赛程 <i>TODAY</i></div>
+            <ul class="home-schedule" id="homeSchedule" aria-live="polite" aria-busy="true">
+              <li class="home-schedule__state">加载中…</li>
+            </ul>
             <div class="kickoff__foot">
               <button class="btn btn--primary" data-goto="schedule">完整赛程</button>
               <button class="btn btn--ghost"   data-goto="teams">全部队伍</button>
             </div>
           </div>
 
+          <!-- Pane 2: 最新战报 -->
           <div class="pane">
-            <div class="pane__head">队伍信息 <i>TEAMS</i></div>
-            <div class="signup">
-              <span class="signup__badge">
-                <i class="signup__pulse" aria-hidden="true"></i> 正在报名 ing
-              </span>
-              <p class="signup__note">报名通道现已开启<br>欢迎各高校战队 <b>踊跃参与</b></p>
-              <button class="btn btn--primary btn--block" id="signupBtn" aria-label="打开报名信息弹窗">📝 立即报名</button>
+            <div class="pane__head">最新战报 <i>RESULTS</i></div>
+            <ul class="home-results" id="homeResults" aria-live="polite" aria-busy="true">
+              <li class="home-schedule__state">加载中…</li>
+            </ul>
+            <div class="kickoff__foot">
+              <button class="btn btn--primary" data-goto="schedule">查看全部战报</button>
             </div>
           </div>
         </div>
@@ -154,24 +142,24 @@
         <div class="hosts__grid reveal-stagger">
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 残响"
+              <img src="assets/host/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 老波"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 1</div>
             </div>
           </figure>
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 老波"
+              <img src="assets/host/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 紫洋葱"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 2</div>
             </div>
           </figure>
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 紫洋葱"
+              <img src="assets/host/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 残响"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 3</div>
             </div>
@@ -182,6 +170,14 @@
                    loading="lazy" decoding="async" data-zoom="主办立绘 · 锯雪"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 4</div>
+            </div>
+          </figure>
+          <figure class="host-figure">
+            <div class="host-figure__media">
+              <img src="assets/host/IVSCL_咸鱼.jpg" alt="IVSCL 主办立绘 · 咸鱼"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 咸鱼"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+              <div class="host-figure__ph" style="display:none">主办立绘 5</div>
             </div>
           </figure>
         </div>
@@ -299,25 +295,23 @@
         <p class="sub">本届赛事参赛战队一览 · 队长可创建自己的队伍</p>
       </div>
 
+      <!-- 视图1：普通队伍列表 -->
       <div id="teamsMainView">
         <div class="teams-toolbar">
           <div class="teams-tabs" id="teamsTabs" role="tablist">
             <button class="teams-tab is-active" data-teams-tab="all" type="button">所有队伍</button>
             <button class="teams-tab" data-teams-tab="mine" type="button" hidden>我的队伍</button>
           </div>
-
           <div class="teams-search" id="teamsSearchBar" role="search">
             <input id="teamsSearch" type="search" placeholder="输入队伍名称或简称" autocomplete="off">
             <span class="teams-search__count" id="teamsResultCount" aria-live="polite"></span>
           </div>
-
           <div id="teamsAdminActions"></div>
         </div>
 
         <div class="teams-grid" id="teamsGrid" aria-live="polite" aria-busy="true">
           <div class="board__state" style="grid-column:1/-1">正在加载队伍信息…</div>
         </div>
-
         <div id="myTeamEmpty" hidden></div>
 
         <div class="cta reveal">
@@ -332,6 +326,28 @@
         </div>
       </div>
 
+      <!-- 视图2：管理员队伍管理（完整页面） -->
+      <div id="teamsAdminView" hidden>
+        <div class="teams-admin-header">
+          <button class="btn btn--ghost btn--sm" id="teamsAdminBackBtn" type="button">← 返回队伍列表</button>
+          <h3 class="teams-admin-title">队伍管理 <em>ADMIN</em></h3>
+          <div class="teams-search">
+            <input id="teamsAdminSearch" type="search" placeholder="搜索学校名称或简称" autocomplete="off">
+            <span class="teams-search__count" id="teamsAdminCount" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="teams-grid" id="teamsAdminGrid"></div>
+      </div>
+
+      <!-- 视图3：管理员查看单队详情 -->
+      <div id="teamsAdminDetailView" hidden>
+        <div class="teams-admin-header">
+          <button class="btn btn--ghost btn--sm" id="teamsAdminDetailBackBtn" type="button">← 返回队伍管理</button>
+        </div>
+        <div id="teamsAdminDetailContent"></div>
+      </div>
+
+      <!-- 队长编辑面板（复用） -->
       <section class="team-editor-panel" id="teamEditorPanel" hidden></section>
     </div>
   </section>
@@ -488,6 +504,6 @@
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261003-12"></script>
+<script type="module" src="js/main.js?v=20261003-15"></script>
 </body>
 </html>

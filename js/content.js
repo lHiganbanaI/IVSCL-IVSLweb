@@ -1,5 +1,5 @@
 /* ============================================================
-   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分、队长管理选手
+   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分、队长管理
 ============================================================ */
 
 import { apiRequest, getCurrentUser } from './api.js';
@@ -10,6 +10,7 @@ import {
   THANKS_SUB_MAP,
   DEFAULT_QAS, DEFAULT_HISTORY, DEFAULT_THANKS
 } from './config.js';
+import { parseTournament } from './tournament.js';
 
 /* ============================================================
    /api/teams 请求缓存
@@ -60,7 +61,7 @@ export function invalidateTeams() {
 }
 
 /* ============================================================
-   公告栏
+   公告栏（支持置顶）
 ============================================================ */
 function renderAnnouncements(list, container) {
   if (!list || !list.length) {
@@ -68,14 +69,17 @@ function renderAnnouncements(list, container) {
     return 0;
   }
   container.innerHTML = list.map(item => {
-    const tag      = sanitize(item.tag || '公告');
-    const tagClass = item.tag_class || 'tag--notice';
+    const tag      = sanitize(item.tag || '动态');
+    const tagClass = item.tag_class || 'tag--event';
     const time     = formatTime(item.time);
     const text     = sanitize(item.text || '');
+    const pinned   = !!item.is_pinned;
     return `
-      <li>
+      <li class="${pinned ? 'is-pinned' : ''}">
         <div class="msg__top">
+          ${pinned ? '<span class="msg__pin" aria-hidden="true">📌</span>' : ''}
           <span class="msg__tag ${tagClass}">${tag}</span>
+          ${pinned ? '<span class="msg__tag msg__tag--pin">置顶</span>' : ''}
           ${time ? `<span class="msg__time">${sanitize(time)}</span>` : ''}
         </div>
         <p class="msg__text">${text}</p>
@@ -157,6 +161,182 @@ export async function loadQAs() {
 
   const n = renderQAs(list, box);
   if (cnt) cnt.textContent = n + ' 条';
+  box.setAttribute('aria-busy', 'false');
+}
+
+/* ============================================================
+   主页 · 今日赛程
+============================================================ */
+export async function loadHomeSchedule() {
+  const box = document.getElementById('homeSchedule');
+  if (!box) return;
+
+  let schedule = null;
+  let appointments = [];
+  let nameMap = {};
+
+  try {
+    const [scheduleData, teamData] = await Promise.all([
+      apiRequest('/api/schedule').catch(() => ({})),
+      fetchTeams().catch(() => ({ teams: [] }))
+    ]);
+    schedule = scheduleData.schedule;
+    (teamData.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+
+    if (schedule?.matches?.length) {
+      const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] }));
+      appointments = appointmentData.appointments || [];
+    }
+  } catch (err) {
+    box.innerHTML = '<li class="home-schedule__state">加载失败</li>';
+    box.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  if (!schedule?.matches?.length) {
+    box.innerHTML = '<li class="home-schedule__state">赛程尚未发布</li>';
+    box.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
+  const list = schedule.matches.map((m, i) => ({
+    match: m,
+    index: i,
+    appointment: appointmentByIndex.get(i)
+  }));
+
+  const upcoming = list
+    .filter(item => !item.appointment?.is_finished)
+    .sort((a, b) => {
+      const at = a.appointment?.start_time ? new Date(a.appointment.start_time).getTime() : Infinity;
+      const bt = b.appointment?.start_time ? new Date(b.appointment.start_time).getTime() : Infinity;
+      return at - bt;
+    });
+
+  const todayStr = (() => {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
+
+  let show = upcoming.filter(item => {
+    const t = item.appointment?.start_time;
+    if (!t) return false;
+    const d = new Date(t);
+    const pad = n => String(n).padStart(2, '0');
+    const dStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    return dStr === todayStr;
+  });
+
+  let label = '今日';
+  if (!show.length) {
+    show = upcoming.slice(0, 4);
+    label = '近期';
+  }
+
+  if (!show.length) {
+    box.innerHTML = '<li class="home-schedule__state">暂无未完成的比赛</li>';
+    box.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  box.innerHTML = show.map(item => {
+    const aName = nameMap[item.match.a] || item.match.a || '轮空';
+    const bName = nameMap[item.match.b] || item.match.b || '轮空';
+    const timeStr = item.appointment?.start_time
+      ? formatBeijing(item.appointment.start_time)
+      : '待定';
+    const status = item.appointment
+      ? '<span class="home-schedule__tag home-schedule__tag--booked">已约赛</span>'
+      : '<span class="home-schedule__tag">待约赛</span>';
+    return `
+      <li class="home-schedule__item">
+        <div class="home-schedule__meta">
+          <span class="home-schedule__label">${label}</span>
+          <span class="home-schedule__time">${sanitize(timeStr)}</span>
+        </div>
+        <div class="home-schedule__vs">
+          <span>${sanitize(aName)}</span>
+          <em>VS</em>
+          <span>${sanitize(bName)}</span>
+        </div>
+        ${status}
+      </li>
+    `;
+  }).join('');
+  box.setAttribute('aria-busy', 'false');
+}
+
+/* ============================================================
+   主页 · 最新战报
+============================================================ */
+export async function loadHomeResults() {
+  const box = document.getElementById('homeResults');
+  if (!box) return;
+
+  let schedule = null;
+  let appointments = [];
+  let nameMap = {};
+
+  try {
+    const [scheduleData, teamData] = await Promise.all([
+      apiRequest('/api/schedule').catch(() => ({})),
+      fetchTeams().catch(() => ({ teams: [] }))
+    ]);
+    schedule = scheduleData.schedule;
+    (teamData.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+
+    if (schedule?.matches?.length) {
+      const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] }));
+      appointments = appointmentData.appointments || [];
+    }
+  } catch (err) {
+    box.innerHTML = '<li class="home-schedule__state">加载失败</li>';
+    box.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  if (!schedule?.matches?.length) {
+    box.innerHTML = '<li class="home-schedule__state">赛程尚未发布</li>';
+    box.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
+  const finished = schedule.matches
+    .map((m, i) => ({ match: m, index: i, appointment: appointmentByIndex.get(i) }))
+    .filter(item => item.appointment?.is_finished && item.appointment.score_a != null && item.appointment.score_b != null)
+    .sort((a, b) => (b.appointment.id || 0) - (a.appointment.id || 0))
+    .slice(0, 3);
+
+  if (!finished.length) {
+    box.innerHTML = '<li class="home-schedule__state">还没有已完赛的比赛</li>';
+    box.setAttribute('aria-busy', 'false');
+    return;
+  }
+
+  box.innerHTML = finished.map(item => {
+    const aName = nameMap[item.match.a] || item.match.a || '—';
+    const bName = nameMap[item.match.b] || item.match.b || '—';
+    const sa = item.appointment.score_a;
+    const sb = item.appointment.score_b;
+    const aWin = sa > sb;
+    const bWin = sb > sa;
+    return `
+      <li class="home-result__item">
+        <div class="home-result__team ${aWin ? 'is-win' : ''}">
+          ${aWin ? '<em>🏆</em>' : ''}
+          <span>${sanitize(aName)}</span>
+        </div>
+        <div class="home-result__score">${sa} : ${sb}</div>
+        <div class="home-result__team ${bWin ? 'is-win' : ''}">
+          <span>${sanitize(bName)}</span>
+          ${bWin ? '<em>🏆</em>' : ''}
+        </div>
+      </li>
+    `;
+  }).join('');
   box.setAttribute('aria-busy', 'false');
 }
 
@@ -265,10 +445,7 @@ function updateTeamsChrome() {
     if (user?.role === 'admin') {
       adminActions.innerHTML = `<button class="btn btn--ghost btn--sm" id="adminManageTeamsBtn" type="button">🛡️ 管理队伍</button>`;
       const btn = document.getElementById('adminManageTeamsBtn');
-      btn?.addEventListener('click', () => {
-        document.querySelector('.tab[data-tab="tools"]')?.click();
-        setTimeout(() => document.querySelector('[data-tool-id="teams"]')?.click(), 200);
-      });
+      btn?.addEventListener('click', () => showTeamsAdminView());
     } else {
       adminActions.innerHTML = '';
     }
@@ -341,6 +518,7 @@ export async function loadTeams() {
   await refreshMySchool();
   updateTeamsChrome();
   bindTeamsTabs();
+  bindTeamsAdminViews();
 
   try {
     const data = await fetchTeams();
@@ -368,13 +546,200 @@ export async function loadTeams() {
 }
 
 /* ============================================================
+   管理员队伍管理视图
+============================================================ */
+let __adminViewsBound = false;
+
+function bindTeamsAdminViews() {
+  if (__adminViewsBound) return;
+  __adminViewsBound = true;
+
+  document.getElementById('teamsAdminBackBtn')?.addEventListener('click', hideTeamsAdminView);
+  document.getElementById('teamsAdminDetailBackBtn')?.addEventListener('click', () => {
+    const adminView = document.getElementById('teamsAdminView');
+    const detailView = document.getElementById('teamsAdminDetailView');
+    if (adminView) adminView.hidden = false;
+    if (detailView) detailView.hidden = true;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  const search = document.getElementById('teamsAdminSearch');
+  if (search && !search.dataset.bound) {
+    search.dataset.bound = 'true';
+    search.addEventListener('input', () => renderTeamsAdminList());
+  }
+}
+
+function showTeamsAdminView() {
+  const main = document.getElementById('teamsMainView');
+  const adminView = document.getElementById('teamsAdminView');
+  const detailView = document.getElementById('teamsAdminDetailView');
+  const editorPanel = document.getElementById('teamEditorPanel');
+  if (!main || !adminView) return;
+
+  main.hidden = true;
+  if (detailView) detailView.hidden = true;
+  if (editorPanel) editorPanel.hidden = true;
+  adminView.hidden = false;
+
+  renderTeamsAdminList();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function hideTeamsAdminView() {
+  const main = document.getElementById('teamsMainView');
+  const adminView = document.getElementById('teamsAdminView');
+  const detailView = document.getElementById('teamsAdminDetailView');
+  if (!main || !adminView) return;
+
+  adminView.hidden = true;
+  if (detailView) detailView.hidden = true;
+  main.hidden = false;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 暴露给 tools.js 调用
+window.__showTeamsAdminView = showTeamsAdminView;
+
+function renderTeamsAdminList() {
+  const grid = document.getElementById('teamsAdminGrid');
+  const count = document.getElementById('teamsAdminCount');
+  const search = document.getElementById('teamsAdminSearch');
+  if (!grid) return;
+
+  const query = (search?.value || '').trim().toLowerCase();
+  const filtered = __teamsListCache.filter(t => {
+    if (!query) return true;
+    return (t.name || '').toLowerCase().includes(query) || (t.short || '').toLowerCase().includes(query);
+  });
+
+  if (count) {
+    count.textContent = query
+      ? `匹配 ${filtered.length} / ${__teamsListCache.length} 支`
+      : `共 ${__teamsListCache.length} 支队伍`;
+  }
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="board__state" style="grid-column:1/-1">没有匹配的队伍</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(item => {
+    const name = sanitize(item.name || '');
+    const short = sanitize(item.short || '');
+    const logoSrc = item.logo ? item.logo : `${TEAM_LOGO_DIR}loge_${short}${TEAM_LOGO_EXT}`;
+    return `
+      <div class="team-card team-card--admin" data-admin-team="${short}" role="button" tabindex="0" aria-label="查看 ${name} 详情">
+        <div class="team-card__logo-wrap">
+          <img class="team-card__logo" src="${logoSrc}" alt="${name} logo" loading="lazy"
+            onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23182242%22 stroke=%22%23d4b47a%22 stroke-width=%222%22 stroke-dasharray=%226 6%22/><text x=%2250%22 y=%2264%22 font-size=%2240%22 font-weight=%22900%22 fill=%22%23d4b47a%22 text-anchor=%22middle%22 font-family=%22sans-serif%22>?</text></svg>'">
+        </div>
+        <h3 class="team-card__name">${name}</h3>
+        <span class="team-card__short">${short}</span>
+      </div>
+    `;
+  }).join('');
+
+  grid.querySelectorAll('[data-admin-team]').forEach(card => {
+    const open = () => showTeamAdminDetail(card.dataset.adminTeam);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
+}
+
+async function showTeamAdminDetail(school) {
+  const adminView = document.getElementById('teamsAdminView');
+  const detailView = document.getElementById('teamsAdminDetailView');
+  const detailContent = document.getElementById('teamsAdminDetailContent');
+  if (!adminView || !detailView || !detailContent) return;
+
+  const schoolInfo = __teamsListCache.find(t => t.short === school) || {};
+  const schoolName = schoolInfo.name || school;
+  const schoolShort = schoolInfo.short || school;
+  const schoolLogo = schoolInfo.logo || '';
+
+  adminView.hidden = true;
+  detailView.hidden = false;
+  detailContent.innerHTML = '<div class="board__state">加载选手名单中…</div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  let players = [];
+  let coachName = '';
+  try {
+    const pd = await apiRequest('/api/team/players?school=' + encodeURIComponent(school));
+    const list = pd.players || [];
+    players = list.filter(x => !x.is_coach);
+    coachName = (list.find(x => x.is_coach) || {}).name || '';
+  } catch (err) {
+    detailContent.innerHTML = `<div class="board__state">加载失败：${sanitize(err.message)}</div>`;
+    return;
+  }
+
+  const groups = [
+    { key: '求生', label: '求生', icon: '🏃' },
+    { key: '监管', label: '监管', icon: '👁️' },
+    { key: '双边', label: '双边', icon: '⚔️' }
+  ];
+
+  const groupsHtml = groups.map(g => {
+    const list = players.filter(p => p.position === g.key);
+    if (!list.length) return '';
+    return `
+      <div class="admin-team-group">
+        <div class="admin-team-group__head">
+          <span class="admin-team-group__icon">${g.icon}</span>
+          <h4>${g.label}</h4>
+          <span class="admin-team-group__count">${list.length} 人</span>
+        </div>
+        <div class="admin-team-players">
+          ${list.map(p => `
+            <div class="admin-team-player">
+              <div class="admin-team-player__name">
+                ${sanitize(p.name || '未命名')}
+                ${p.cn_short ? `<span class="admin-team-player__cn">（${sanitize(p.cn_short)}）</span>` : ''}
+              </div>
+              <div class="admin-team-player__uid">ID ${sanitize(p.uid || '—')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  detailContent.innerHTML = `
+    <div class="admin-team-detail">
+      <div class="admin-team-detail__head">
+        ${schoolLogo
+          ? `<img class="admin-team-detail__logo" src="${schoolLogo}" alt="${sanitize(schoolName)} logo">`
+          : `<div class="admin-team-detail__logo admin-team-detail__logo--empty">?</div>`}
+        <div class="admin-team-detail__info">
+          <h3 class="admin-team-detail__name">${sanitize(schoolName)}</h3>
+          <div class="admin-team-detail__short">${sanitize(schoolShort)}</div>
+          <div class="admin-team-detail__stats">
+            <span>选手 <b>${players.length}</b></span>
+            ${coachName ? `<span>教练 <b>${sanitize(coachName)}</b></span>` : ''}
+          </div>
+        </div>
+      </div>
+      ${players.length ? groupsHtml : '<div class="board__state">该校尚未提交选手名单</div>'}
+    </div>
+  `;
+}
+
+/* ============================================================
    内嵌队伍编辑面板 —— 打开 / 关闭
 ============================================================ */
 function showTeamEditorPanel() {
   const panel = document.getElementById('teamEditorPanel');
   const mainView = document.getElementById('teamsMainView');
+  const adminView = document.getElementById('teamsAdminView');
+  const detailView = document.getElementById('teamsAdminDetailView');
   if (!panel || !mainView) return;
   mainView.hidden = true;
+  if (adminView) adminView.hidden = true;
+  if (detailView) detailView.hidden = true;
   panel.hidden = false;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -422,9 +787,6 @@ function compressImage(file, maxSize = 300, quality = 0.78) {
   });
 }
 
-/* ============================================================
-   选手行 HTML（4 列：游戏 ID / 游戏 CN / CN 简称 / 位置）
-============================================================ */
 function renderPlayerRowHtml(p, i, posOpts) {
   return `
     <div class="player-row" data-i="${i}">
@@ -477,7 +839,7 @@ function collectPlayersFromPanel(panel) {
 }
 
 /* ============================================================
-   ① 创建队伍：内嵌面板（学校信息 + 选手）
+   创建队伍：内嵌面板
 ============================================================ */
 let __createState = { pendingLogo: null };
 
@@ -681,7 +1043,7 @@ async function openTeamEditorPanel(school) {
 }
 
 /* ============================================================
-   ② 编辑选手：内嵌面板（学校信息只读，只改队员）
+   编辑选手：内嵌面板（学校信息只读）
 ============================================================ */
 async function openPlayerEditorPanel(school) {
   const panel = document.getElementById('teamEditorPanel');
@@ -983,9 +1345,8 @@ export async function loadStaff() {
       const names = staff.filter(person => person.role === group.role);
       const rows = names.length
         ? names.map(person => `
-            <li class="thanks-card__member">
-              <span class="thanks-card__avatar">${sanitize(getInitial(person.username))}</span>
-              <span class="thanks-card__name">${sanitize(person.username || '未命名')}</span>
+            <li class="staff-name-row">
+              <span class="staff-name-row__name">${sanitize(person.username || '未命名')}</span>
             </li>
           `).join('')
         : '<li class="staff-empty">暂未登记</li>';
@@ -1396,13 +1757,15 @@ let currentAppointments = [];
 let scheduleResizeHandler = null;
 let scheduleLoadSequence = 0;
 
-export function renderSchedule(list, container, title, logoMap, nameMap, scheduleId = null, appointments = []) {
+export function renderSchedule(list, container, title, logoMap, nameMap, scheduleId = null, appointments = [], tournament = null) {
   currentScheduleId = scheduleId;
   currentScheduleMatches = list || [];
   currentScheduleTitle = title || '';
   currentScheduleLogoMap = logoMap || {};
   currentScheduleNameMap = nameMap || {};
   currentAppointments = appointments;
+  currentTournament = tournament;
+
   if (!list || !list.length) {
     if (scheduleResizeHandler) window.removeEventListener('resize', scheduleResizeHandler);
     scheduleResizeHandler = null;
@@ -1410,108 +1773,254 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
     container.setAttribute('aria-busy', 'false');
     return;
   }
-  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
-  const sortedMatches = list.map((match, index) => ({ match, index, appointment: appointmentByIndex.get(index) }))
-    .sort((left, right) => {
-      const leftDone = Number(left.appointment?.is_finished || 0);
-      const rightDone = Number(right.appointment?.is_finished || 0);
-      if (leftDone !== rightDone) return leftDone - rightDone;
-      const leftTime = left.appointment?.start_time ? new Date(left.appointment.start_time).getTime() : Number.MAX_SAFE_INTEGER;
-      const rightTime = right.appointment?.start_time ? new Date(right.appointment.start_time).getTime() : Number.MAX_SAFE_INTEGER;
-      return leftTime - rightTime || left.index - right.index;
-    });
-  const cards = sortedMatches.map(({ match: p, index: i, appointment }) => {
-    const judgeCount = (appointment?.signups || []).filter(signup => signup.role === 'judge').length;
-    const commentatorCount = (appointment?.signups || []).filter(signup => signup.role === 'commentator').length;
-    const status = appointment?.is_finished ? 'finished' : appointment ? 'scheduled' : 'unbooked';
-    const appointmentTime = appointment ? `<span class="schedule-card__time">${sanitize(formatMatchTime(appointment.start_time))}</span>` : '';
-    const appointmentStaff = appointment ? `<span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>` : '';
 
-    const score = scoreText(appointment);
-    const finished = !!appointment?.is_finished;
-    let centerMain;
-    if (score) {
-      centerMain = `<div class="schedule-card__score">${score}</div>`;
-    } else if (finished) {
-      centerMain = `<div class="schedule-card__score schedule-card__score--pending">比分待补录</div>`;
-    } else {
-      centerMain = `<div class="schedule-card__vs">VS</div>`;
-    }
+  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
+
+  /* 状态优先级：已约赛(0) → 待约赛(1) → 已完赛(2) */
+  const statusPriority = appt => {
+    if (appt?.is_finished) return 2;
+    if (appt) return 0;
+    return 1;
+  };
+
+  /* 单个对阵的排序函数 */
+  const sortItems = (a, b) => {
+    const pa = statusPriority(a.appointment);
+    const pb = statusPriority(b.appointment);
+    if (pa !== pb) return pa - pb;
+    const ta = a.appointment?.start_time ? new Date(a.appointment.start_time).getTime() : Infinity;
+    const tb = b.appointment?.start_time ? new Date(b.appointment.start_time).getTime() : Infinity;
+    return ta - tb || a.flatIndex - b.flatIndex;
+  };
+
+  /* ---------- 分组 ---------- */
+  const grouped = [];
+  if (tournament && tournament.rounds?.length) {
+    let flatIndex = 0;
+    tournament.rounds.forEach(r => {
+      const roundMatches = r.matches.map((m, mi) => ({
+        match: m,
+        flatIndex: flatIndex + mi,      // 原始扁平索引，用于详情弹窗
+        roundIndex: r.index,
+        roundName: r.name,
+        appointment: appointmentByIndex.get(flatIndex + mi)
+      }));
+      roundMatches.sort(sortItems);
+      grouped.push({ round: r, items: roundMatches });
+      flatIndex += r.matches.length;
+    });
+  } else {
+    const items = list.map((m, i) => ({
+      match: m,
+      flatIndex: i,
+      roundIndex: 1,
+      roundName: `${list.length * 2} 进 ${list.length}`,
+      appointment: appointmentByIndex.get(i)
+    }));
+    items.sort(sortItems);
+    grouped.push({ round: { index: 1, name: `${list.length * 2} 进 ${list.length}` }, items });
+  }
+
+  /* ---------- 顶部概览 ---------- */
+  const overviewHtml = grouped.map(g => {
+    const done = g.items.filter(it => it.appointment?.is_finished).length;
+    const total = g.items.length;
+    const percent = total ? Math.round((done / total) * 100) : 0;
+    return `
+      <div class="schedule-overview__item ${done === total && total > 0 ? 'is-done' : ''}">
+        <div class="schedule-overview__head">
+          <span class="schedule-overview__index">第 ${g.round.index} 轮</span>
+          <span class="schedule-overview__name">${sanitize(g.round.name || '')}</span>
+        </div>
+        <div class="schedule-overview__progress">
+          <div class="schedule-overview__bar" style="width:${percent}%"></div>
+        </div>
+        <div class="schedule-overview__meta">${done} / ${total} 场已完赛</div>
+      </div>
+    `;
+  }).join('');
+
+  /* ---------- 每轮卡片（默认只显示 8 场） ---------- */
+  const INITIAL_LIMIT = 8;
+
+  const roundsHtml = grouped.map(g => {
+    const cards = g.items.map(({ match: p, flatIndex, appointment }, idx) => {
+      const judgeCount = (appointment?.signups || []).filter(s => s.role === 'judge').length;
+      const commentatorCount = (appointment?.signups || []).filter(s => s.role === 'commentator').length;
+      const status = appointment?.is_finished ? 'finished' : appointment ? 'scheduled' : 'unbooked';
+      const appointmentTime = appointment ? `<span class="schedule-card__time">${sanitize(formatMatchTime(appointment.start_time))}</span>` : '';
+      const appointmentStaff = appointment ? `<span class="schedule-card__staff">裁判 ${judgeCount} · 解说 ${commentatorCount}</span>` : '';
+
+      const score = scoreText(appointment);
+      const finished = !!appointment?.is_finished;
+      let centerMain;
+      if (score) {
+        centerMain = `<div class="schedule-card__score">${score}</div>`;
+      } else if (finished) {
+        centerMain = `<div class="schedule-card__score schedule-card__score--pending">比分待补录</div>`;
+      } else {
+        centerMain = `<div class="schedule-card__vs">VS</div>`;
+      }
+
+      const collapsed = idx >= INITIAL_LIMIT;
+      return `
+        <div class="schedule-card ${appointment?.is_finished ? 'schedule-card--finished' : ''}"
+             role="button" tabindex="0"
+             data-match-index="${flatIndex}"
+             data-round-index="${g.round.index}"
+             data-schedule-status="${status}"
+             data-collapsed="${collapsed ? 'true' : 'false'}"
+             data-team-search="${sanitize(`${p.a || ''} ${p.b || ''}`)}"
+             ${collapsed ? 'hidden' : ''}
+             aria-label="查看 ${sanitize(p.a || '轮空')} 对阵 ${sanitize(p.b || '轮空')} 详情">
+          ${scheduleSideHtml(p.a, logoMap, nameMap)}
+          <div class="schedule-card__center">
+            <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
+            ${centerMain}
+            ${appointmentTime}
+            ${appointmentStaff}
+          </div>
+          ${scheduleSideHtml(p.b, logoMap, nameMap)}
+        </div>
+      `;
+    }).join('');
+
+    const hiddenCount = Math.max(0, g.items.length - INITIAL_LIMIT);
+    const moreBtn = hiddenCount > 0
+      ? `<button class="btn btn--ghost btn--sm schedule-round__more" type="button"
+                 data-round="${g.round.index}" aria-expanded="false">
+           显示更多（${hiddenCount} 场）
+         </button>`
+      : '';
 
     return `
-    <div class="schedule-card ${appointment?.is_finished ? 'schedule-card--finished' : ''}" role="button" tabindex="0" data-match-index="${i}" data-schedule-status="${status}" data-team-search="${sanitize(`${p.a || ''} ${p.b || ''}`)}" aria-label="查看 ${sanitize(p.a || '轮空')} 对阵 ${sanitize(p.b || '轮空')} 详情">
-      ${scheduleSideHtml(p.a, logoMap, nameMap)}
-      <div class="schedule-card__center">
-        <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
-        ${centerMain}
-        ${appointmentTime}
-        ${appointmentStaff}
-      </div>
-      ${scheduleSideHtml(p.b, logoMap, nameMap)}
-    </div>
-  `;
+      <section class="schedule-round" data-round="${g.round.index}" data-expanded="false">
+        <div class="schedule-round__head">
+          <span class="schedule-round__index">第 ${g.round.index} 轮</span>
+          <h4 class="schedule-round__name">${sanitize(g.round.name || '')}</h4>
+          <span class="schedule-round__count">${g.items.length} 场</span>
+        </div>
+        <div class="schedule-grid">${cards}</div>
+        ${moreBtn}
+      </section>
+    `;
   }).join('');
+
   container.innerHTML = `
     <div class="schedule-board__head">
       <h3>${sanitize(title || '64 进 32 淘汰赛')}</h3>
       <span class="schedule-board__count" id="scheduleResultCount" aria-live="polite">${list.length} 场对阵</span>
     </div>
+
+    ${tournament && tournament.totalRounds > 1 ? `
+    <div class="schedule-overview">
+      <div class="schedule-overview__title">
+        <b>本次比赛赛程</b>
+        <em>${tournament.typeLabel} · 共 ${tournament.totalRounds} 轮</em>
+      </div>
+      <div class="schedule-overview__grid">${overviewHtml}</div>
+    </div>
+    ` : ''}
+
     <div class="list-controls schedule-controls" role="search">
       <label class="list-controls__search"><span>搜索对阵</span><input id="scheduleSearch" type="search" placeholder="输入队伍名称或简称" autocomplete="off"></label>
       <label class="list-controls__filter"><span>比赛状态</span><select id="scheduleStatusFilter"><option value="all">全部状态</option><option value="unfinished">未完赛</option><option value="scheduled">已约赛 · 未完赛</option><option value="unbooked">待约赛</option><option value="finished">已完赛</option></select></label>
     </div>
-    <div class="schedule-grid">${cards}</div>
+
+    <div class="schedule-rounds">${roundsHtml}</div>
+
     <p class="schedule-no-results" id="scheduleNoResults" hidden>没有符合条件的对阵，请调整搜索内容或比赛状态。</p>
-    <button class="btn btn--ghost btn--sm schedule-show-more" id="scheduleShowMore" type="button" aria-expanded="false" hidden>显示更多</button>
   `;
+
+  /* ---------- 卡片点击 ---------- */
   container.querySelectorAll('[data-match-index]').forEach(card => {
     const open = () => {
-      const index = Number(card.dataset.matchIndex);
-      showMatchDetails(list[index], appointmentByIndex.get(index));
+      const idx = Number(card.dataset.matchIndex);
+      showMatchDetails(list[idx], appointmentByIndex.get(idx));
     };
     card.addEventListener('click', open);
     card.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
   });
-  const showMoreButton = container.querySelector('#scheduleShowMore');
-  const cardsEls = [...container.querySelectorAll('[data-match-index]')];
-  let expanded = false;
+
+  /* ---------- 每轮"显示更多/收起"按钮 ---------- */
+  container.querySelectorAll('.schedule-round__more').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const section = btn.closest('.schedule-round');
+      if (!section) return;
+      const nextExpanded = section.dataset.expanded !== 'true';
+      section.dataset.expanded = nextExpanded ? 'true' : 'false';
+      btn.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+
+      /* 恢复该轮所有折叠卡片的显隐 */
+      section.querySelectorAll('[data-collapsed="true"]').forEach(card => {
+        card.hidden = !nextExpanded;
+      });
+
+      const hiddenCount = section.querySelectorAll('[data-collapsed="true"]').length;
+      btn.textContent = nextExpanded ? '收起' : `显示更多（${hiddenCount} 场）`;
+    });
+  });
+
+  /* ---------- 搜索 + 状态过滤 ---------- */
   const searchInput = container.querySelector('#scheduleSearch');
   const statusFilter = container.querySelector('#scheduleStatusFilter');
   const resultCount = container.querySelector('#scheduleResultCount');
   const noResults = container.querySelector('#scheduleNoResults');
+  const allCards = [...container.querySelectorAll('[data-match-index]')];
+
   const updateScheduleFilters = () => {
     const query = (searchInput?.value || '').trim().toLocaleLowerCase();
     const status = statusFilter?.value || 'all';
-    const filtered = cardsEls.filter(card => {
-      const matchesText = !query || `${card.textContent} ${card.dataset.teamSearch || ''}`.toLocaleLowerCase().includes(query);
-      const matchesStatus = status === 'all' || (status === 'unfinished' ? card.dataset.scheduleStatus !== 'finished' : card.dataset.scheduleStatus === status);
-      card.dataset.filterMatch = matchesText && matchesStatus ? 'true' : 'false';
-      return matchesText && matchesStatus;
+    const isFiltering = !!(query || status !== 'all');
+    let visible = 0;
+
+    container.querySelectorAll('.schedule-round').forEach(section => {
+      const expanded = section.dataset.expanded === 'true';
+      const cards = [...section.querySelectorAll('[data-match-index]')];
+      let sectionVisible = 0;
+
+      cards.forEach(card => {
+        const matchesText = !query || `${card.textContent} ${card.dataset.teamSearch || ''}`.toLocaleLowerCase().includes(query);
+        const matchesStatus = status === 'all' || (status === 'unfinished' ? card.dataset.scheduleStatus !== 'finished' : card.dataset.scheduleStatus === status);
+        const isMatch = matchesText && matchesStatus;
+
+        if (isMatch) {
+          const isCollapsed = card.dataset.collapsed === 'true';
+          /* 有搜索/过滤时忽略折叠，直接展示所有匹配项；无过滤时按折叠状态 */
+          card.hidden = !isFiltering && !expanded && isCollapsed;
+          sectionVisible++;
+        } else {
+          card.hidden = true;
+        }
+      });
+
+      visible += sectionVisible;
+      section.hidden = sectionVisible === 0;
+
+      /* 过滤时隐藏"显示更多"按钮，因为所有匹配项已展示 */
+      const moreBtn = section.querySelector('.schedule-round__more');
+      if (moreBtn) {
+        const totalCollapsed = cards.filter(c => c.dataset.collapsed === 'true').length;
+        moreBtn.hidden = isFiltering || totalCollapsed === 0;
+      }
     });
-    const initialCount = 6;
-    const visibleCount = expanded ? filtered.length : Math.min(filtered.length, initialCount);
-    if (resultCount) resultCount.textContent = query || status !== 'all'
-      ? `匹配 ${filtered.length} 场 · 已显示 ${visibleCount} / ${cardsEls.length}`
-      : `已显示 ${visibleCount} / ${cardsEls.length} 场`;
-    if (noResults) noResults.hidden = filtered.length > 0;
-    filtered.forEach((card, index) => { card.hidden = !expanded && index >= initialCount; });
-    cardsEls.filter(card => card.dataset.filterMatch !== 'true').forEach(card => { card.hidden = true; });
-    showMoreButton.hidden = filtered.length <= initialCount;
-    showMoreButton.textContent = expanded ? '收起' : '显示更多';
-    showMoreButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+
+    if (resultCount) resultCount.textContent = isFiltering
+      ? `匹配 ${visible} / ${allCards.length} 场`
+      : `${allCards.length} 场对阵`;
+    if (noResults) noResults.hidden = visible > 0;
   };
-  searchInput?.addEventListener('input', () => { expanded = false; updateScheduleFilters(); });
-  statusFilter?.addEventListener('change', () => { expanded = false; updateScheduleFilters(); });
-  if (scheduleResizeHandler) window.removeEventListener('resize', scheduleResizeHandler);
-  const updateVisibleCards = () => { updateScheduleFilters(); };
-  showMoreButton.addEventListener('click', () => { expanded = !expanded; updateScheduleFilters(); });
-  scheduleResizeHandler = updateVisibleCards;
-  window.addEventListener('resize', scheduleResizeHandler);
-  updateVisibleCards();
+
+  searchInput?.addEventListener('input', updateScheduleFilters);
+  statusFilter?.addEventListener('change', updateScheduleFilters);
+  updateScheduleFilters();
+
   container.setAttribute('aria-busy', 'false');
 }
+
+let currentTournament = null;
 
 export async function loadSchedule() {
   const box = document.getElementById('scheduleBoard');
@@ -1522,15 +2031,21 @@ export async function loadSchedule() {
     const data = await apiRequest('/api/schedule');
     if (loadSequence !== scheduleLoadSequence || !box.isConnected) return;
     const s = data.schedule;
-    if (!s || !s.matches || !s.matches.length) {
+    if (!s || !s.matches) {
       renderSchedule([], box, '', {}, {});
       return;
     }
-    renderSchedule(s.matches, box, s.title, {}, {}, s.id, []);
+
+    /* 解析赛制对象 */
+    const tournament = parseTournament(s.matches);
+    const flatMatches = tournament ? tournament.allMatches : (Array.isArray(s.matches) ? s.matches : []);
+
+    renderSchedule(flatMatches, box, s.title, {}, {}, s.id, [], tournament);
+
     const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${s.id}`).catch(() => ({ appointments: [] }));
     if (loadSequence !== scheduleLoadSequence || !box.isConnected) return;
     const appointments = appointmentData.appointments || [];
-    renderSchedule(s.matches, box, s.title, {}, {}, s.id, appointments);
+    renderSchedule(flatMatches, box, s.title, {}, {}, s.id, appointments, tournament);
 
     let nameMap = {};
     let logoMap = {};
@@ -1576,4 +2091,6 @@ export async function loadSchedule() {
 export function initContent() {
   loadAnnouncements();
   loadQAs();
+  loadHomeSchedule();
+  loadHomeResults();
 }
