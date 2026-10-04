@@ -1,5 +1,10 @@
 /* ============================================================
    我的比赛（独立页面）
+   筛选规则：
+   - 队伍队长：自己队伍参与的对阵
+   - 裁判 / 解说：自己报名过的比赛
+   - 管理员：全部比赛
+   - 无相关内容 → "暂时没有与我相关的比赛"
 ============================================================ */
 
 import { apiRequest, getCurrentUser } from './api.js';
@@ -9,15 +14,22 @@ import { fetchTeams, showActionNotice } from './content.js';
 
 let __prevActivePanel = null;
 
+/* ============================================================
+   打开 / 关闭页面
+============================================================ */
 export async function openMyMatchesPage() {
   const page = document.getElementById('myMatchesPage');
-  if (!page) return;
+  if (!page) {
+    console.error('[我的比赛] #myMatchesPage 不存在，请检查 index.html');
+    return;
+  }
 
   const activePanel = document.querySelector('.panel.is-active');
   if (activePanel) __prevActivePanel = activePanel.dataset.panel;
 
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('is-active'));
   page.hidden = false;
+  document.body.style.overflow = '';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   await renderMyMatches();
@@ -33,12 +45,18 @@ function closeMyMatchesPage() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/* ============================================================
+   主渲染
+============================================================ */
 async function renderMyMatches() {
   const content = document.getElementById('myMatchesContent');
   if (!content) return;
+
   content.innerHTML = '<div class="board__state" style="padding:60px 20px">加载中…</div>';
 
   const user = getCurrentUser();
+
+  /* 未登录 */
   if (!user) {
     content.innerHTML = `
       <div class="my-matches-empty">
@@ -55,6 +73,7 @@ async function renderMyMatches() {
     return;
   }
 
+  /* 拉取赛程 + 队伍绑定 */
   let schedule = null;
   let mySchool = null;
 
@@ -71,17 +90,19 @@ async function renderMyMatches() {
     return;
   }
 
+  /* 没有赛程 */
   if (!schedule || !schedule.matches) {
     content.innerHTML = `
       <div class="my-matches-empty">
         <div class="my-matches-empty__icon">📭</div>
-        <div class="my-matches-empty__title">暂无赛程</div>
-        <div class="my-matches-empty__desc">管理员发布赛程后可以在这里查看</div>
+        <div class="my-matches-empty__title">暂时没有与我相关的比赛</div>
+        <div class="my-matches-empty__desc">管理员尚未发布赛程</div>
       </div>
     `;
     return;
   }
 
+  /* 拉取约赛记录 + 首发记录 */
   const [appointmentData, lineupData] = await Promise.all([
     apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] })),
     apiRequest(`/api/match-lineups?schedule_id=${schedule.id}`).catch(() => ({ lineups: [] }))
@@ -89,15 +110,32 @@ async function renderMyMatches() {
   const appointments = appointmentData.appointments || [];
   const lineups = lineupData.lineups || [];
 
+  /* 扁平化对阵 */
   const tournament = parseTournament(schedule.matches);
   const flatMatches = tournament ? tournament.allMatches : (Array.isArray(schedule.matches) ? schedule.matches : []);
 
+  /* 队伍名称 */
   const teamNames = {};
   try {
     const td = await fetchTeams();
     (td.teams || []).forEach(t => { teamNames[t.short] = t.name || t.short; });
   } catch {}
 
+  /* 队伍绑定检查 */
+  if (user.role === 'team' && !mySchool) {
+    content.innerHTML = `
+      <div class="my-matches-empty">
+        <div class="my-matches-empty__icon">🏫</div>
+        <div class="my-matches-empty__title">尚未绑定队伍</div>
+        <div class="my-matches-empty__desc">请先到「队伍信息 → 我的队伍」绑定学校，才能看到相关比赛</div>
+      </div>
+    `;
+    return;
+  }
+
+  /* ============================================================
+     筛选与用户相关的比赛
+  ============================================================ */
   const related = flatMatches
     .map((m, i) => ({
       match: m,
@@ -108,32 +146,40 @@ async function renderMyMatches() {
     }))
     .filter(item => {
       if (!item.match.a || !item.match.b) return false;
-      if (user.role === 'team') return item.match.a === mySchool || item.match.b === mySchool;
-      return ['admin', 'judge', 'commentator'].includes(user.role);
+
+      /* 队长：自己队伍参与的对阵 */
+      if (user.role === 'team') {
+        return item.match.a === mySchool || item.match.b === mySchool;
+      }
+
+      /* 管理员：全部 */
+      if (user.role === 'admin') return true;
+
+      /* 裁判 / 解说：自己报名过的比赛 */
+      if (user.role === 'judge' || user.role === 'commentator') {
+        const signups = item.appointment?.signups || [];
+        return signups.some(s => s.is_mine);
+      }
+
+      return false;
     });
 
-  if (user.role === 'team' && !mySchool) {
-    content.innerHTML = `
-      <div class="my-matches-empty">
-        <div class="my-matches-empty__icon">🏫</div>
-        <div class="my-matches-empty__title">尚未绑定队伍</div>
-        <div class="my-matches-empty__desc">请先到「队伍信息 → 我的队伍」绑定学校</div>
-      </div>
-    `;
-    return;
-  }
-
+  /* 无相关比赛 */
   if (!related.length) {
     content.innerHTML = `
       <div class="my-matches-empty">
         <div class="my-matches-empty__icon">📭</div>
-        <div class="my-matches-empty__title">暂无相关比赛</div>
-        <div class="my-matches-empty__desc">赛程中没有找到与你队伍相关的对阵</div>
+        <div class="my-matches-empty__title">暂时没有与我相关的比赛</div>
+        <div class="my-matches-empty__desc">${emptyHint(user.role)}</div>
       </div>
     `;
+    document.getElementById('myMatchesBackBtn')?.addEventListener('click', closeMyMatchesPage, { once: true });
     return;
   }
 
+  /* ============================================================
+     拉取选手名单（队长需要自己队伍；其他人需要双方）
+  ============================================================ */
   const needSchools = new Set();
   related.forEach(item => {
     needSchools.add(item.match.a);
@@ -155,27 +201,35 @@ async function renderMyMatches() {
     }));
   }
 
+  /* 首发 map */
   const lineupMap = new Map();
   lineups.forEach(l => lineupMap.set(`${l.match_index}-${l.school}`, l));
 
+  /* ============================================================
+     渲染
+  ============================================================ */
   if (user.role === 'team' && mySchool) {
+    /* 队长视角 */
     const submittedCount = related.filter(item => lineupMap.has(`${item.index}-${mySchool}`)).length;
     content.innerHTML = `
       <div class="my-matches-summary">
         共 <b>${related.length}</b> 场相关比赛 · 已提交首发 <b>${submittedCount}</b> 场
       </div>
       <div class="my-matches-list">
-        ${related.map(item => renderMyMatchCard(item, mySchool, teamNames, playersMap[mySchool] || [], lineupMap.get(`${item.index}-${mySchool}`))).join('')}
+        ${related.map(item => renderTeamCard(item, mySchool, teamNames, playersMap[mySchool] || [], lineupMap.get(`${item.index}-${mySchool}`))).join('')}
       </div>
     `;
-    bindMyMatchEvents(content, mySchool, schedule.id);
+    bindTeamSubmit(content, schedule.id);
   } else {
+    /* 裁判 / 解说 / 管理员视角 */
+    const roleHint = user.role === 'judge' ? '裁判' : user.role === 'commentator' ? '解说' : '管理员';
+    const titleHint = user.role === 'admin' ? `共 ${related.length} 场比赛` : `已报名 ${related.length} 场比赛`;
     content.innerHTML = `
       <div class="my-matches-summary">
-        共 <b>${related.length}</b> 场比赛
+        ${titleHint} · ${roleHint}视角
       </div>
       <div class="my-matches-list">
-        ${related.map(item => renderViewMatchCard(item, teamNames, playersMap, lineupMap)).join('')}
+        ${related.map(item => renderViewCard(item, teamNames, playersMap, lineupMap)).join('')}
       </div>
     `;
   }
@@ -183,7 +237,17 @@ async function renderMyMatches() {
   document.getElementById('myMatchesBackBtn')?.addEventListener('click', closeMyMatchesPage, { once: true });
 }
 
-function renderMyMatchCard(item, mySchool, teamNames, players, lineup) {
+function emptyHint(role) {
+  if (role === 'team') return '赛程中暂无你队伍参与的对阵';
+  if (role === 'judge') return '你还没有在比赛详情里报名裁判';
+  if (role === 'commentator') return '你还没有在比赛详情里报名解说';
+  return '暂无数据';
+}
+
+/* ============================================================
+   队长卡片 · 可编辑首发
+============================================================ */
+function renderTeamCard(item, mySchool, teamNames, players, lineup) {
   const aName = teamNames[item.match.a] || item.match.a;
   const bName = teamNames[item.match.b] || item.match.b;
   const mySide = item.match.a === mySchool ? 'a' : 'b';
@@ -241,19 +305,19 @@ function renderMyMatchCard(item, mySchool, teamNames, players, lineup) {
           <div class="lineup-grid">
             <div class="lineup-slot">
               <label>求生者 1</label>
-              <select class="lineup-survivor" data-slot="0">${survivorOpts(starters.survivors[0])}</select>
+              <select class="lineup-survivor">${survivorOpts(starters.survivors[0])}</select>
             </div>
             <div class="lineup-slot">
               <label>求生者 2</label>
-              <select class="lineup-survivor" data-slot="1">${survivorOpts(starters.survivors[1])}</select>
+              <select class="lineup-survivor">${survivorOpts(starters.survivors[1])}</select>
             </div>
             <div class="lineup-slot">
               <label>求生者 3</label>
-              <select class="lineup-survivor" data-slot="2">${survivorOpts(starters.survivors[2])}</select>
+              <select class="lineup-survivor">${survivorOpts(starters.survivors[2])}</select>
             </div>
             <div class="lineup-slot">
               <label>求生者 4</label>
-              <select class="lineup-survivor" data-slot="3">${survivorOpts(starters.survivors[3])}</select>
+              <select class="lineup-survivor">${survivorOpts(starters.survivors[3])}</select>
             </div>
             <div class="lineup-slot lineup-slot--hunter">
               <label>监管者</label>
@@ -275,7 +339,10 @@ function renderMyMatchCard(item, mySchool, teamNames, players, lineup) {
   `;
 }
 
-function renderViewMatchCard(item, teamNames, playersMap, lineupMap) {
+/* ============================================================
+   裁判 / 解说 / 管理员卡片 · 只读
+============================================================ */
+function renderViewCard(item, teamNames, playersMap, lineupMap) {
   const aName = teamNames[item.match.a] || item.match.a;
   const bName = teamNames[item.match.b] || item.match.b;
   const timeStr = item.appointment?.start_time ? formatBeijing(item.appointment.start_time) : '待定';
@@ -330,7 +397,10 @@ function renderViewMatchCard(item, teamNames, playersMap, lineupMap) {
   `;
 }
 
-function bindMyMatchEvents(content, mySchool, scheduleId) {
+/* ============================================================
+   队长提交事件
+============================================================ */
+function bindTeamSubmit(content, scheduleId) {
   content.querySelectorAll('.my-match-card').forEach(card => {
     const submitBtn = card.querySelector('.lineup-submit');
     if (!submitBtn) return;
@@ -341,16 +411,9 @@ function bindMyMatchEvents(content, mySchool, scheduleId) {
       const survivors = [...card.querySelectorAll('.lineup-survivor')].map(s => s.value);
       const hunter = card.querySelector('.lineup-hunter').value;
 
-      if (survivors.some(v => !v)) {
-        showActionNotice('请选择 4 名求生者', true);
-        if (msg) msg.textContent = '请选择完整的 4 名求生者';
-        return;
-      }
-      if (!hunter) {
-        showActionNotice('请选择 1 名监管者', true);
-        if (msg) msg.textContent = '请选择监管者';
-        return;
-      }
+      if (survivors.some(v => !v)) { showActionNotice('请选择 4 名求生者', true); if (msg) msg.textContent = '请选择完整的 4 名求生者'; return; }
+      if (!hunter) { showActionNotice('请选择 1 名监管者', true); if (msg) msg.textContent = '请选择监管者'; return; }
+
       const allIds = [...survivors.map(Number), Number(hunter)];
       if (new Set(allIds).size !== allIds.length) {
         showActionNotice('不能重复选择同一位选手', true);
@@ -388,3 +451,8 @@ function bindMyMatchEvents(content, mySchool, scheduleId) {
     });
   });
 }
+
+/* ============================================================
+   双保险：自己挂到 window，避免 main.js 未更新
+============================================================ */
+window.__openMyMatchesPage = openMyMatchesPage;

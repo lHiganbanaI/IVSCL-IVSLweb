@@ -20,6 +20,10 @@ import {
   DoubleElimination,
   GroupStage
 } from './tournament.js';
+import { openMyMatchesPage } from './my-matches.js';
+
+/* 双保险：把入口挂到 window */
+window.__openMyMatchesPage = window.__openMyMatchesPage || openMyMatchesPage;
 
 const teamSchoolCache = new Map();
 const teamSchoolRequests = new Map();
