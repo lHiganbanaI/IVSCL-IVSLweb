@@ -408,17 +408,38 @@ function bindTeamSubmit(content, scheduleId) {
     const msg = card.querySelector('.lineup-msg');
 
     submitBtn.addEventListener('click', async () => {
-      const survivors = [...card.querySelectorAll('.lineup-survivor')].map(s => s.value);
+            const survivors = [...card.querySelectorAll('.lineup-survivor')].map(s => s.value);
       const hunter = card.querySelector('.lineup-hunter').value;
 
-      if (survivors.some(v => !v)) { showActionNotice('请选择 4 名求生者', true); if (msg) msg.textContent = '请选择完整的 4 名求生者'; return; }
-      if (!hunter) { showActionNotice('请选择 1 名监管者', true); if (msg) msg.textContent = '请选择监管者'; return; }
-
-      const allIds = [...survivors.map(Number), Number(hunter)];
-      if (new Set(allIds).size !== allIds.length) {
-        showActionNotice('不能重复选择同一位选手', true);
-        if (msg) msg.textContent = '不能重复选择同一位选手';
+      if (survivors.some(v => !v)) {
+        showActionNotice('请选择 4 名求生者', true);
+        if (msg) msg.textContent = '请选择完整的 4 名求生者';
         return;
+      }
+      if (!hunter) {
+        showActionNotice('请选择 1 名监管者', true);
+        if (msg) msg.textContent = '请选择监管者';
+        return;
+      }
+
+      const survivorIds = survivors.map(Number);
+      const hunterId = Number(hunter);
+
+      /* 4 名求生者之间不能重复 */
+      if (new Set(survivorIds).size !== survivorIds.length) {
+        showActionNotice('4 名求生者不能重复', true);
+        if (msg) msg.textContent = '4 名求生者不能重复';
+        return;
+      }
+
+      /* 监管者与求生者重复 → 仅当该选手是「双边」时允许 */
+      if (survivorIds.includes(hunterId)) {
+        const dupPlayer = players.find(p => Number(p.id) === hunterId);
+        if (!dupPlayer || dupPlayer.position !== '双边') {
+          showActionNotice('监管者不能与求生者重复（仅「双边」选手可同时占据两个位置）', true);
+          if (msg) msg.textContent = '仅「双边」选手可同时出现在求生和监管位';
+          return;
+        }
       }
 
       submitBtn.disabled = true;
