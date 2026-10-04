@@ -149,10 +149,13 @@ export function renderToolsPanel() {
         window.open(tool.external, '_blank', 'noopener');
         return;
       }
-      /* 队伍管理：直接跳转到队伍信息页并打开管理视图 */
       if (id === 'teams') {
         document.querySelector('.tab[data-tab="teams"]')?.click();
         setTimeout(() => window.__showTeamsAdminView?.(), 300);
+        return;
+      }
+      if (id === 'myMatches') {
+        window.__openMyMatchesPage?.();
         return;
       }
       openToolModal(id);
@@ -199,7 +202,16 @@ async function openToolModal(toolId) {
   const box = document.getElementById('toolModalContent');
   if (!box) return;
 
-  if (toolId === 'announcements') {
+  const modalEl = document.querySelector('#toolModal .tool-modal');
+  if (modalEl) {
+    modalEl.classList.toggle('tool-modal--wide', toolId === 'matchesOverview');
+  }
+
+  if (toolId === 'matchesOverview') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadMatchesOverviewTool(box);
+  } else if (toolId === 'announcements') {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadAnnouncementsTool(box);
@@ -228,7 +240,178 @@ async function openToolModal(toolId) {
 }
 
 /* ============================================================
-   公告栏管理（默认"动态"、日期选择、置顶）
+   管理员 · 比赛总览
+============================================================ */
+async function loadMatchesOverviewTool(box) {
+  let data;
+  try {
+    data = await apiRequest('/api/admin/matches-overview');
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+    return;
+  }
+
+  if (!data || !data.schedule) {
+    box.innerHTML = `
+      <h3 class="tool-modal__title">比赛总览 <em>ADMIN</em></h3>
+      <div class="tool-modal__info">当前没有已发布的赛程。</div>
+    `;
+    return;
+  }
+
+  const schedule = data.schedule;
+  const matches = data.matches || [];
+
+  box.innerHTML = `
+    <h3 class="tool-modal__title">比赛总览 <em>ADMIN</em></h3>
+    <p class="tool-modal__sub">
+      ${sanitize(schedule.title || '赛程')} ·
+      <b>${schedule.total_matches}</b> 场比赛 ·
+      合并展示<b>约赛时间 / 比分 / 首发名单</b>
+    </p>
+
+    <div class="overview-toolbar">
+      <input type="search" id="ovSearch" placeholder="搜索队伍名称或简称" autocomplete="off">
+      <select id="ovFilter">
+        <option value="all">全部比赛</option>
+        <option value="booked">已约赛</option>
+        <option value="finished">已完赛</option>
+        <option value="unbooked">未约赛</option>
+        <option value="lineup-missing">首发未齐</option>
+      </select>
+      <span class="overview-toolbar__count" id="ovCount"></span>
+    </div>
+
+    <div class="overview-list" id="ovList"></div>
+  `;
+
+  const list = box.querySelector('#ovList');
+  const search = box.querySelector('#ovSearch');
+  const filter = box.querySelector('#ovFilter');
+  const countEl = box.querySelector('#ovCount');
+
+  const renderCard = (m) => {
+    const appt = m.appointment;
+    const timeStr = appt && appt.start_time ? formatBeijing(appt.start_time) : '未约赛';
+    const hasScore = !!(appt && appt.is_finished && appt.score_a != null && appt.score_b != null);
+    const scoreStr = hasScore ? `${appt.score_a} : ${appt.score_b}` : '—';
+
+    const statusText = appt
+      ? (appt.is_finished ? '已完赛' : '已约赛')
+      : '未约赛';
+    const statusClass = appt
+      ? (appt.is_finished ? 'is-finished' : 'is-booked')
+      : 'is-unbooked';
+
+    const lineupStatus = (ln) => ln ? '<span class="ov-lineup__status is-done">✓ 已提交</span>' : '<span class="ov-lineup__status is-pending">⚠ 未提交</span>';
+    const playerLine = (p) => `${sanitize(p.name || '—')}${p.cn_short ? `（${sanitize(p.cn_short)}）` : ''}<em>${sanitize(p.uid || '')}</em>`;
+
+    const renderLineup = (ln) => {
+      if (!ln) {
+        return `
+          <div class="ov-lineup__empty">该校未提交首发名单</div>
+        `;
+      }
+      return `
+        <div class="ov-lineup__group">
+          <span class="ov-lineup__group-title">求生者</span>
+          <ul class="ov-lineup__players">
+            ${(ln.survivors || []).map(p => `<li>${playerLine(p)}</li>`).join('') || '<li class="ov-lineup__none">—</li>'}
+          </ul>
+        </div>
+        <div class="ov-lineup__group">
+          <span class="ov-lineup__group-title">监管者</span>
+          <ul class="ov-lineup__players">
+            ${ln.hunter ? `<li>${playerLine(ln.hunter)}</li>` : '<li class="ov-lineup__none">—</li>'}
+          </ul>
+        </div>
+        <div class="ov-lineup__meta">
+          ${ln.updated_at ? `提交于 ${sanitize(formatBeijing(ln.updated_at))}` : ''}
+          ${ln.submitted_by_name ? ` · 由 ${sanitize(ln.submitted_by_name)}` : ''}
+        </div>
+      `;
+    };
+
+    return `
+      <article class="ov-match" data-search="${sanitize(`${m.team_a_name} ${m.team_a} ${m.team_b_name} ${m.team_b}`)}"
+               data-status="${appt ? (appt.is_finished ? 'finished' : 'booked') : 'unbooked'}"
+               data-lineup="${m.lineup_a && m.lineup_b ? 'full' : 'missing'}">
+        <div class="ov-match__head">
+          <span class="ov-match__round">
+            ${m.round_index ? `第 ${m.round_index} 轮` : '赛程'}
+            ${m.round_name ? ` · ${sanitize(m.round_name)}` : ''}
+          </span>
+          <span class="ov-match__status ${statusClass}">${statusText}</span>
+          <span class="ov-match__index">#${m.match_index + 1}</span>
+        </div>
+
+        <div class="ov-match__vs">
+          <div class="ov-match__team">
+            ${m.team_a_logo ? `<img src="${m.team_a_logo}" alt="${sanitize(m.team_a_name)}">` : '<span class="ov-match__team-ph">?</span>'}
+            <span class="ov-match__team-name">${sanitize(m.team_a_name)}</span>
+          </div>
+          <div class="ov-match__center">
+            <div class="ov-match__score">${scoreStr}</div>
+            <div class="ov-match__time">📅 ${sanitize(timeStr)}</div>
+          </div>
+          <div class="ov-match__team">
+            ${m.team_b_logo ? `<img src="${m.team_b_logo}" alt="${sanitize(m.team_b_name)}">` : '<span class="ov-match__team-ph">?</span>'}
+            <span class="ov-match__team-name">${sanitize(m.team_b_name)}</span>
+          </div>
+        </div>
+
+        <div class="ov-lineups">
+          <div class="ov-lineup">
+            <div class="ov-lineup__head">
+              <b>${sanitize(m.team_a_name)}</b>
+              ${lineupStatus(m.lineup_a)}
+            </div>
+            ${renderLineup(m.lineup_a)}
+          </div>
+          <div class="ov-lineup">
+            <div class="ov-lineup__head">
+              <b>${sanitize(m.team_b_name)}</b>
+              ${lineupStatus(m.lineup_b)}
+            </div>
+            ${renderLineup(m.lineup_b)}
+          </div>
+        </div>
+      </article>
+    `;
+  };
+
+  const update = () => {
+    const q = (search.value || '').trim().toLowerCase();
+    const f = filter.value;
+    const cards = [...list.querySelectorAll('.ov-match')];
+    let visible = 0;
+    cards.forEach(card => {
+      const text = card.dataset.search.toLowerCase();
+      const status = card.dataset.status;
+      const lineup = card.dataset.lineup;
+
+      let matchFilter = true;
+      if (f === 'booked') matchFilter = status === 'booked';
+      else if (f === 'finished') matchFilter = status === 'finished';
+      else if (f === 'unbooked') matchFilter = status === 'unbooked';
+      else if (f === 'lineup-missing') matchFilter = lineup === 'missing';
+
+      const matchSearch = !q || text.includes(q);
+      const show = matchFilter && matchSearch;
+      card.hidden = !show;
+      if (show) visible++;
+    });
+    countEl.textContent = `显示 ${visible} / ${cards.length} 场`;
+  };
+
+  list.innerHTML = matches.map(renderCard).join('') || '<div class="board__state">暂无比赛</div>';
+  search.addEventListener('input', update);
+  filter.addEventListener('change', update);
+  update();
+}
+
+/* ============================================================
+   公告栏管理
 ============================================================ */
 function todayDateStr() {
   const d = new Date();
@@ -497,7 +680,8 @@ async function loadRoomsTool(box) {
   let matches = [];
   try {
     const sd = await apiRequest('/api/schedule');
-    matches = (sd.schedule && sd.schedule.matches) || [];
+    const tn = sd.schedule ? parseTournament(sd.schedule.matches) : null;
+    matches = tn ? tn.allMatches : [];
   } catch (e) {}
 
   const matchOpts = matches.map((m, i) => {
@@ -735,12 +919,12 @@ function renderRoomListBox(list, nameMap) {
 }
 
 /* ============================================================
-   添加赛程（支持单淘汰 / 双淘汰 / 小组赛）
+   添加赛程
 ============================================================ */
 let __scheduleFormState = {
   type: 'single',
-  parsed: null,   // 解析后的 Tournament 对象
-  raw: null       // 原始 JSON
+  parsed: null,
+  raw: null
 };
 
 async function loadScheduleTool(box) {
@@ -836,7 +1020,6 @@ async function loadScheduleTool(box) {
     </section>
   `;
 
-  /* 赛制 tab 切换 */
   document.querySelectorAll('#schedTypeTabs .schedule-type-tab').forEach(tab => {
     tab.addEventListener('click', () => {
       __scheduleFormState.type = tab.dataset.type;
@@ -846,7 +1029,6 @@ async function loadScheduleTool(box) {
     });
   });
 
-  /* 生成骨架 */
   document.getElementById('schedGenerateBtn').addEventListener('click', () => {
     const n = Number(document.getElementById('scheduleTeamCount').value);
     if (!Number.isInteger(n) || n < 2) { alert('请输入有效队伍数（≥ 2）'); return; }
@@ -855,7 +1037,6 @@ async function loadScheduleTool(box) {
     if (__scheduleFormState.type === 'double') {
       tournament = new DoubleElimination({ rounds: DoubleElimination.buildRounds(n) });
     } else if (__scheduleFormState.type === 'group') {
-      /* 小组赛：均分成若干组，组内单循环 */
       const groupCount = Math.max(1, Math.min(8, Math.floor(n / 4)) || 1);
       const rounds = [];
       const perGroup = Math.ceil(n / groupCount);
@@ -889,7 +1070,6 @@ async function loadScheduleTool(box) {
     document.getElementById('scheduleMsg').textContent = `✅ 已生成骨架，请填写对阵后点「发布赛程」`;
   });
 
-  /* 上传文件 */
   const fileInput = document.getElementById('scheduleFile');
   const msg = document.getElementById('scheduleMsg');
 
@@ -927,7 +1107,6 @@ async function loadScheduleTool(box) {
     reader.readAsText(file, 'utf-8');
   });
 
-  /* 发布 */
   document.getElementById('schedulePublishBtn').addEventListener('click', async () => {
     const t = __scheduleFormState.parsed;
     if (!t) { alert('请先上传 JSON 或生成骨架'); return; }
@@ -983,7 +1162,6 @@ async function loadScheduleTool(box) {
     }
   });
 
-  /* 清空 */
   document.getElementById('scheduleClearBtn').addEventListener('click', async () => {
     if (!confirm('确定要清空当前赛程吗？')) return;
     try {
@@ -1003,7 +1181,6 @@ async function loadScheduleTool(box) {
   renderSchedulePreview();
 }
 
-/* 赛程预览 */
 function renderSchedulePreview() {
   const box = document.getElementById('schedPreview');
   const count = document.getElementById('schedPreviewCount');
@@ -1083,7 +1260,7 @@ function renderScheduleListBox(schedule) {
 }
 
 /* ============================================================
-   约赛（已绑定学校的队长）
+   约赛
 ============================================================ */
 async function loadMatchBookingTool(box) {
   const user = getCurrentUser();
@@ -1206,7 +1383,7 @@ async function loadMatchBookingTool(box) {
 }
 
 /* ============================================================
-   绑定学校（队伍队长）
+   绑定学校
 ============================================================ */
 async function loadBindSchoolTool(box) {
   const u = getCurrentUser();
@@ -1273,7 +1450,7 @@ async function loadBindSchoolTool(box) {
 }
 
 /* ============================================================
-   通用的选手列表渲染（被"比赛房间"复用）
+   通用的选手列表渲染
 ============================================================ */
 function renderPlayersList(list, school) {
   if (!list || !list.length) {

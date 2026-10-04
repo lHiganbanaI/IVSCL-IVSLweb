@@ -74,7 +74,6 @@ export const DEFAULT_THANKS = [
 
 /* ============================================================
    页面功能工具定义
-   顺序：公共 → 裁判 → 管理员 → 队伍
 ============================================================ */
 export const TOOLS_DEF = [
   {
@@ -85,6 +84,13 @@ export const TOOLS_DEF = [
     desc: '跳转到 IVSCL & IVSL 官方 B 站主页',
     external: 'https://space.bilibili.com/563096834',
     className: 'tool-card--external'
+  },
+  {
+    id: 'myMatches',
+    section: 'public',
+    icon: '🎮',
+    title: '我的比赛',
+    desc: '查看与队伍相关的比赛，提交首发选手名单'
   },
   {
     id: 'rooms',
@@ -111,6 +117,14 @@ export const TOOLS_DEF = [
     roles: ['admin']
   },
   {
+    id: 'matchesOverview',
+    section: 'admin',
+    icon: '📊',
+    title: '比赛总览',
+    desc: '查看每场比赛的约赛时间、比分与双方首发名单',
+    roles: ['admin']
+  },
+  {
     id: 'draw',
     section: 'admin',
     icon: '🎲',
@@ -118,7 +132,7 @@ export const TOOLS_DEF = [
     desc: '为当前参赛队伍随机生成对阵表',
     roles: ['admin']
   },
-    {
+  {
     id: 'schedule',
     section: 'admin',
     icon: '🗓️',
@@ -145,7 +159,6 @@ export const TOOLS_DEF = [
   }
 ];
 
-/* 分区信息（显示用的标题） */
 export const SECTION_LABELS = {
   public:      { title: '公共工具', sub: 'PUBLIC' },
   referee:     { title: '裁判工具', sub: 'REFEREE' },
@@ -154,5 +167,4 @@ export const SECTION_LABELS = {
   admin:       { title: '管理员工具', sub: 'ADMIN' }
 };
 
-/* 分区显示顺序 */
 export const SECTION_ORDER = ['public', 'referee', 'commentator', 'team', 'admin'];

@@ -11,10 +11,9 @@
 <meta name="keywords" content="IVSCL,IVSL,高校电竞,电子竞技,联合赛季,2026,报名">
 
 <link rel="preload" as="image" href="assets/misc/promo.jpg" fetchpriority="high">
-
 <link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
 <link rel="apple-touch-icon" href="assets/loge/loge_IVSCL.jpg">
-<link rel="stylesheet" href="css/style.css?v=20261003-12">
+<link rel="stylesheet" href="css/style.css?v=20261004-03">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="IVSCL & IVSL 联合官网">
@@ -56,6 +55,7 @@
       <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
       <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
       <button class="tab" data-tab="tools" role="tab" aria-selected="false">网页功能</button>
+      <button class="tab" data-tab="king" role="tab" aria-selected="false">👑 我是皇帝</button>
     </nav>
   </div>
 </header>
@@ -70,26 +70,24 @@
       </div>
 
       <div class="stage">
-                <div class="stage__left">
-          <!-- Pane 1: 今日赛程 -->
+        <div class="stage__left">
           <div class="pane">
             <div class="pane__head">今日赛程 <i>TODAY</i></div>
             <ul class="home-schedule" id="homeSchedule" aria-live="polite" aria-busy="true">
               <li class="home-schedule__state">加载中…</li>
             </ul>
-            <div class="kickoff__foot">
+            <div class="kickoff__foot home-pane-actions">
               <button class="btn btn--primary" data-goto="schedule">完整赛程</button>
               <button class="btn btn--ghost"   data-goto="teams">全部队伍</button>
             </div>
           </div>
 
-          <!-- Pane 2: 最新战报 -->
           <div class="pane">
             <div class="pane__head">最新战报 <i>RESULTS</i></div>
             <ul class="home-results" id="homeResults" aria-live="polite" aria-busy="true">
               <li class="home-schedule__state">加载中…</li>
             </ul>
-            <div class="kickoff__foot">
+            <div class="kickoff__foot home-pane-actions">
               <button class="btn btn--primary" data-goto="schedule">查看全部战报</button>
             </div>
           </div>
@@ -142,24 +140,24 @@
         <div class="hosts__grid reveal-stagger">
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 老波"
+              <img src="assets/host/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 残响"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 1</div>
             </div>
           </figure>
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 紫洋葱"
+              <img src="assets/host/IVSCL_老波.jpg" alt="IVSCL 主办立绘 · 老波"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 老波"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 2</div>
             </div>
           </figure>
           <figure class="host-figure">
             <div class="host-figure__media">
-              <img src="assets/host/IVSCL_残响.jpg" alt="IVSCL 主办立绘 · 残响"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 残响"
+              <img src="assets/host/IVSCL_紫洋葱.jpg" alt="IVSCL 主办立绘 · 紫洋葱"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 紫洋葱"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 3</div>
             </div>
@@ -170,14 +168,6 @@
                    loading="lazy" decoding="async" data-zoom="主办立绘 · 锯雪"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 4</div>
-            </div>
-          </figure>
-          <figure class="host-figure">
-            <div class="host-figure__media">
-              <img src="assets/host/IVSCL_咸鱼.jpg" alt="IVSCL 主办立绘 · 咸鱼"
-                   loading="lazy" decoding="async" data-zoom="主办立绘 · 咸鱼"
-                   onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
-              <div class="host-figure__ph" style="display:none">主办立绘 5</div>
             </div>
           </figure>
         </div>
@@ -295,23 +285,25 @@
         <p class="sub">本届赛事参赛战队一览 · 队长可创建自己的队伍</p>
       </div>
 
-      <!-- 视图1：普通队伍列表 -->
       <div id="teamsMainView">
         <div class="teams-toolbar">
           <div class="teams-tabs" id="teamsTabs" role="tablist">
             <button class="teams-tab is-active" data-teams-tab="all" type="button">所有队伍</button>
             <button class="teams-tab" data-teams-tab="mine" type="button" hidden>我的队伍</button>
           </div>
+
           <div class="teams-search" id="teamsSearchBar" role="search">
             <input id="teamsSearch" type="search" placeholder="输入队伍名称或简称" autocomplete="off">
             <span class="teams-search__count" id="teamsResultCount" aria-live="polite"></span>
           </div>
+
           <div id="teamsAdminActions"></div>
         </div>
 
         <div class="teams-grid" id="teamsGrid" aria-live="polite" aria-busy="true">
           <div class="board__state" style="grid-column:1/-1">正在加载队伍信息…</div>
         </div>
+
         <div id="myTeamEmpty" hidden></div>
 
         <div class="cta reveal">
@@ -326,7 +318,6 @@
         </div>
       </div>
 
-      <!-- 视图2：管理员队伍管理（完整页面） -->
       <div id="teamsAdminView" hidden>
         <div class="teams-admin-header">
           <button class="btn btn--ghost btn--sm" id="teamsAdminBackBtn" type="button">← 返回队伍列表</button>
@@ -339,7 +330,6 @@
         <div class="teams-grid" id="teamsAdminGrid"></div>
       </div>
 
-      <!-- 视图3：管理员查看单队详情 -->
       <div id="teamsAdminDetailView" hidden>
         <div class="teams-admin-header">
           <button class="btn btn--ghost btn--sm" id="teamsAdminDetailBackBtn" type="button">← 返回队伍管理</button>
@@ -347,8 +337,8 @@
         <div id="teamsAdminDetailContent"></div>
       </div>
 
-      <!-- 队长编辑面板（复用） -->
       <section class="team-editor-panel" id="teamEditorPanel" hidden></section>
+      <section class="team-bind-panel" id="teamBindPanel" hidden></section>
     </div>
   </section>
 
@@ -387,6 +377,48 @@
 
       <div id="toolsIntro"></div>
       <div id="toolsContent"></div>
+    </div>
+  </section>
+
+  <!-- 👑 我是皇帝 -->
+  <section class="panel" data-panel="king">
+    <div class="wrap">
+      <div class="page-head">
+        <p class="eyebrow">KING</p>
+        <h2>👑 我是皇帝</h2>
+        <p class="sub">本页面记录本站自上线以来的所有更新内容</p>
+      </div>
+
+      <div class="king-intro">
+        <div class="king-intro__crown">👑</div>
+        <div class="king-intro__text">
+          <div class="king-intro__title">圣旨到！</div>
+          <div class="king-intro__desc">以下为本站的更新日志，每一次改动都记录在此。愿诸位玩家尽兴。</div>
+        </div>
+      </div>
+
+      <div class="king-timeline" id="kingTimeline"></div>
+
+      <div class="cta reveal">
+        <div class="cta__inner">
+          <h2 class="cta__title">谢主隆恩</h2>
+          <p class="cta__desc">如果对本站有建议或想反馈 Bug，请联系赛事组委会。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 我的比赛 · 独立页面 -->
+  <section class="my-matches-page" id="myMatchesPage" hidden>
+    <div class="wrap">
+      <div class="my-matches-head">
+        <button class="btn btn--ghost btn--sm" id="myMatchesBackBtn" type="button">← 返回</button>
+        <div class="my-matches-head__text">
+          <h2 class="my-matches-head__title">我的比赛</h2>
+          <p class="my-matches-head__sub">查看与队伍相关的比赛，提交首发选手名单</p>
+        </div>
+      </div>
+      <div id="myMatchesContent"></div>
     </div>
   </section>
 
@@ -504,6 +536,6 @@
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261003-15"></script>
+<script type="module" src="js/main.js?v=20261004-03"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
    UI 交互：标签页、报名弹窗、滚动渐显、图片放大
 ============================================================ */
 
-export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'tools'];
+export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'tools', 'king'];
 
 let onTabChange = null;
 
@@ -14,6 +14,10 @@ export function activate(name) {
   if (!VALID_TABS.includes(name)) name = 'home';
   const tabs = document.querySelectorAll('.tab');
   const panels = document.querySelectorAll('.panel');
+
+  /* 关闭独立页面 */
+  const myMatchesPage = document.getElementById('myMatchesPage');
+  if (myMatchesPage) myMatchesPage.hidden = true;
 
   tabs.forEach(t => {
     const isActive = t.dataset.tab === name;
@@ -141,45 +145,6 @@ function initLightbox() {
 }
 
 /* ============================================================
-   倒计时（改用 setInterval，页面隐藏时暂停）
-============================================================ */
-function initCountdown() {
-  const box = document.getElementById('countdown');
-  if (!box) return;
-
-  const target = new Date(box.dataset.target).getTime();
-  const units = {
-    days:    box.querySelector('[data-unit="days"]'),
-    hours:   box.querySelector('[data-unit="hours"]'),
-    minutes: box.querySelector('[data-unit="minutes"]'),
-    seconds: box.querySelector('[data-unit="seconds"]')
-  };
-  const pad = n => String(n).padStart(2, '0');
-
-  function render() {
-    const diff = Math.max(0, target - Date.now());
-    units.days.textContent    = pad(Math.floor(diff / 86400000));
-    units.hours.textContent   = pad(Math.floor(diff / 3600000) % 24);
-    units.minutes.textContent = pad(Math.floor(diff / 60000) % 60);
-    units.seconds.textContent = pad(Math.floor(diff / 1000) % 60);
-  }
-
-  render();
-  let timer = setInterval(render, 1000);
-
-  /* 页面切到后台时停掉定时器，回来时立即刷新 */
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      clearInterval(timer);
-      timer = null;
-    } else {
-      if (!timer) timer = setInterval(render, 1000);
-      render();
-    }
-  });
-}
-
-/* ============================================================
    初始化
 ============================================================ */
 export function initUI() {
@@ -206,5 +171,4 @@ export function initUI() {
   initSignupModal();
   initRevealOnScroll();
   initLightbox();
-  initCountdown();
 }
