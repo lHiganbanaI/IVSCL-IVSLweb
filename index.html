@@ -54,6 +54,9 @@
       <button class="tab" data-tab="about" role="tab" aria-selected="false">赛事相关</button>
       <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
       <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
+      <button class="tab" data-tab="hub" role="tab" aria-selected="false">赛事中心</button>
+      <button class="tab" data-tab="results" role="tab" aria-selected="false">赛果战报</button>
+      <button class="tab" data-tab="board" role="tab" aria-selected="false">竞猜榜</button>
       <button class="tab" data-tab="tools" role="tab" aria-selected="false">网页功能</button>
       <button class="tab" data-tab="king" role="tab" aria-selected="false">👑 我是皇帝</button>
     </nav>
@@ -367,6 +370,48 @@
     </div>
   </section>
 
+  <section class="panel" data-panel="hub">
+    <div class="wrap">
+      <div class="page-head">
+        <p class="eyebrow">HUB</p>
+        <h2>赛事中心</h2>
+        <p class="sub">赛程对阵、赛果战报与竞猜积分一站总览</p>
+      </div>
+
+      <section class="schedule-board" id="hubBoard" aria-live="polite" aria-busy="true">
+        <div class="board__state">正在加载赛事中心…</div>
+      </section>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="results">
+    <div class="wrap">
+      <div class="page-head">
+        <p class="eyebrow">RESULTS</p>
+        <h2>赛果战报</h2>
+        <p class="sub">已完赛的对阵、比分与胜负</p>
+      </div>
+
+      <section class="schedule-board" id="resultsBoard" aria-live="polite" aria-busy="true">
+        <div class="board__state">正在加载赛果…</div>
+      </section>
+    </div>
+  </section>
+
+  <section class="panel" data-panel="board">
+    <div class="wrap">
+      <div class="page-head">
+        <p class="eyebrow">GUESS BOARD</p>
+        <h2>竞猜榜</h2>
+        <p class="sub">场次竞猜积分与冠军竞猜公开排行</p>
+      </div>
+
+      <section class="schedule-board" id="boardBoard" aria-live="polite" aria-busy="true">
+        <div class="board__state">正在加载竞猜榜…</div>
+      </section>
+    </div>
+  </section>
+
   <section class="panel" data-panel="tools">
     <div class="wrap">
       <div class="page-head">
@@ -422,20 +467,6 @@
     </div>
   </section>
 
-  <!-- 我的比赛 · 独立页面 -->
-  <section class="my-matches-page" id="myMatchesPage" hidden>
-    <div class="wrap">
-      <div class="my-matches-head">
-        <button class="btn btn--ghost btn--sm" id="myMatchesBackBtn" type="button">← 返回</button>
-        <div class="my-matches-head__text">
-          <h2 class="my-matches-head__title">我的比赛</h2>
-          <p class="my-matches-head__sub">查看与队伍相关的比赛，提交首发选手名单</p>
-        </div>
-      </div>
-      <div id="myMatchesContent"></div>
-    </div>
-  </section>
-
 </main>
 
 <footer class="footer">
@@ -447,8 +478,8 @@
       <span>联合官网</span>
     </div>
     <div class="footer__links">
-      <a href="#">关于我们</a>
-      <a href="#">联系方式</a>
+      <a href="#about" data-goto="about">赛事介绍</a>
+      <a href="#home" data-goto="home">返回主页</a>
       <a href="https://space.bilibili.com/563096834" target="_blank" rel="noopener">B站官号</a>
       <a href="assets/misc/IVSCL赛事规则.pdf" target="_blank" rel="noopener">赛事规则</a>
     </div>
@@ -478,6 +509,10 @@
           <div class="account-profile__phone" id="profilePhone">—</div>
           <div class="account-profile__role" id="profileRole" data-role="">—</div>
         </div>
+      </div>
+      <div class="account-profile__avatar-actions" id="profileAvatarActions" hidden>
+        <button class="btn btn--ghost" id="profileUploadAvatar" type="button">上传头像</button>
+        <input type="file" id="profileAvatarInput" accept="image/*" hidden>
       </div>
       <div class="account-profile__actions">
         <button class="btn btn--ghost" id="profileLogout" type="button">退出登录</button>
@@ -550,6 +585,6 @@
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261004-04"></script>
+<script type="module" src="js/main.js?v=20261005-07"></script>
 </body>
 </html>

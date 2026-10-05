@@ -2,9 +2,15 @@
    账号系统：登录、注册、登出、按钮渲染
 ============================================================ */
 
-import { ROLE_LABELS } from './config.js';
+import { ROLE_LABELS } from './config.js?v=20261005-07';
 import { apiRequest, getCurrentUser, setToken } from './api.js';
 import { showError, hideError, getInitialFromName } from './utils.js';
+
+/* 头像（base64 本地缓存，与后端库保持一致） */
+const AVATAR_KEY = 'ivscl_avatar';
+export function getCachedAvatar() { return localStorage.getItem(AVATAR_KEY); }
+function setCachedAvatar(v) { if (v) localStorage.setItem(AVATAR_KEY, v); else localStorage.removeItem(AVATAR_KEY); }
+const AVATAR_ROLES = ['admin', 'beta'];
 
 /* 由 main.js 注入的回调（登录状态变化时刷新工具面板） */
 let onAuthChange = null;
@@ -37,7 +43,10 @@ export function renderAccountModal() {
 
   const u = getCurrentUser();
   if (u) {
-    document.getElementById('profileAvatar').textContent = getInitialFromName(u.username);
+    const avatarEl = document.getElementById('profileAvatar');
+    const cached = getCachedAvatar();
+    if (cached) avatarEl.innerHTML = `<img src="${cached}" alt="${u.username || ''}">`;
+    else avatarEl.textContent = getInitialFromName(u.username);
     document.getElementById('profileName').textContent   = u.username || '—';
     document.getElementById('profilePhone').textContent  = u.phone
       ? u.phone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
@@ -45,6 +54,9 @@ export function renderAccountModal() {
     const roleEl = document.getElementById('profileRole');
     roleEl.textContent = ROLE_LABELS[u.role] || u.role;
     roleEl.dataset.role = u.role;
+    /* 头像上传入口：仅管理员 / 解说 / 裁判 */
+    const avActions = document.getElementById('profileAvatarActions');
+    if (avActions) avActions.hidden = !AVATAR_ROLES.includes(u.role);
     profileBox.hidden = false;
     authBox.hidden    = true;
   } else {
@@ -204,6 +216,57 @@ function initRegister() {
 }
 
 /* ============================================================
+   头像上传（仅管理员 / 解说 / 裁判）
+============================================================ */
+function compressImage(file, max = 300) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('图片解析失败'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function initAvatarUpload() {
+  const btn = document.getElementById('profileUploadAvatar');
+  const input = document.getElementById('profileAvatarInput');
+  if (!btn || !input) return;
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const dataUrl = await compressImage(file);
+      if (dataUrl.length > 1.5 * 1024 * 1024) {
+        window.app?.showActionNotice?.('头像过大，请选择更小的图片', true);
+        return;
+      }
+      await apiRequest('/api/user/avatar', { method: 'PUT', body: JSON.stringify({ avatar: dataUrl }) });
+      setCachedAvatar(dataUrl);
+      renderAccountModal();
+      window.app?.showActionNotice?.('头像已更新');
+    } catch (err) {
+      window.app?.showActionNotice?.(err.message || '头像上传失败', true);
+    }
+  });
+}
+
+/* ============================================================
    登出
 ============================================================ */
 function initLogout() {
@@ -211,6 +274,7 @@ function initLogout() {
   if (!btn) return;
   btn.addEventListener('click', () => {
     setToken('');
+    setCachedAvatar(null);
     notifyAuthChange();
   });
 }
@@ -224,5 +288,6 @@ export function initAuth() {
   initLogin();
   initRegister();
   initLogout();
+  initAvatarUpload();
   renderAccountButton();
 }

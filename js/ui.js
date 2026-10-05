@@ -1,33 +1,23 @@
 /* ============================================================
    UI 交互：标签页、报名弹窗、滚动渐显、图片放大
+   （标签页切换 + 转场动画已分离到 transitions.js 的 TabTransition 类）
 ============================================================ */
+import { TabTransition } from './transitions.js';
 
-export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'tools', 'king'];
+export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'hub', 'results', 'board', 'tools', 'king'];
 
-let onTabChange = null;
+/* 转场实例（由 initUI 创建）与切换回调 */
+let nav = null;
+let onSwitch = null;
 
 export function setTabChangeCallback(fn) {
-  onTabChange = fn;
+  onSwitch = fn;
+  if (nav) nav.onSwitch = fn;
 }
 
 export function activate(name) {
-  if (!VALID_TABS.includes(name)) name = 'home';
-  const tabs = document.querySelectorAll('.tab');
-  const panels = document.querySelectorAll('.panel');
-
-  /* 关闭独立页面 */
-  const myMatchesPage = document.getElementById('myMatchesPage');
-  if (myMatchesPage) myMatchesPage.hidden = true;
-
-  tabs.forEach(t => {
-    const isActive = t.dataset.tab === name;
-    t.classList.toggle('is-active', isActive);
-    t.setAttribute('aria-selected', isActive ? 'true' : 'false');
-  });
-  panels.forEach(p => p.classList.toggle('is-active', p.dataset.panel === name));
-
-  if (typeof onTabChange === 'function') onTabChange(name);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (!nav) return;
+  nav.activate(name);
 }
 
 /* ============================================================
@@ -147,26 +137,16 @@ function initLightbox() {
 /* ============================================================
    初始化
 ============================================================ */
-export function initUI() {
-  const tabs = document.querySelectorAll('.tab');
+export function initUI({ animation = 'fade' } = {}) {
+  nav = new TabTransition({ animation });
+  nav.onSwitch = onSwitch;
 
-  tabs.forEach(t => {
-    t.addEventListener('click', () => {
-      activate(t.dataset.tab);
-      history.replaceState(null, '', '#' + t.dataset.tab);
-    });
-  });
+  /* 绑定标签页与 [data-goto] 点击（同步地址栏 hash） */
+  nav.bindTo({ hash: true });
 
-  document.querySelectorAll('[data-goto]').forEach(el => {
-    el.addEventListener('click', e => {
-      e.preventDefault();
-      activate(el.dataset.goto);
-      history.replaceState(null, '', '#' + el.dataset.goto);
-    });
-  });
-
+  /* 初始激活（触发 onSwitch → 各 tab 内容加载） */
   const hash = location.hash.replace('#', '');
-  if (VALID_TABS.includes(hash)) activate(hash);
+  nav.activate(VALID_TABS.includes(hash) ? hash : 'home');
 
   initSignupModal();
   initRevealOnScroll();

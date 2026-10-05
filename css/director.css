@@ -1,0 +1,1096 @@
+/* ============================================================
+   导播封面 · 独立页面样式
+============================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a1228;
+  color: #eef3fb;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   列表页
+============================================================ */
+.dr-list {
+  width: 100%;
+  min-height: 100vh;
+  padding: 40px 32px 60px;
+  overflow-y: auto;
+  background: radial-gradient(60vw 60vw at 10% -10%, rgba(212,180,122,.12), transparent 60%),
+              radial-gradient(50vw 50vw at 90% 100%, rgba(166,139,212,.14), transparent 60%),
+              #0a1228;
+}
+
+.dr-list__head {
+  max-width: 1200px;
+  margin: 0 auto 28px;
+}
+.dr-list__head h1 {
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 900;
+  letter-spacing: .5px;
+  background: linear-gradient(100deg, #e8cf9e, #fff 50%, #c4aef0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 8px;
+}
+.dr-list__head p {
+  font-size: 13.5px;
+  color: #8fa0bd;
+}
+
+.dr-list__content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dr-list__info {
+  padding: 10px 16px;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  background: rgba(212,180,122,.08);
+  border: 1px solid rgba(212,180,122,.28);
+  font-size: 13px;
+  color: #e2e9f5;
+}
+.dr-list__info b { color: #e8cf9e; font-size: 15px; }
+
+.dr-search {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(212,180,122,.28);
+  color: #e6edf7;
+  font-size: 14px;
+  outline: none;
+}
+.dr-search::placeholder { color: #7d8ba8; }
+.dr-search:focus { border-color: #e8cf9e; background: rgba(255,255,255,.07); }
+
+.dr-list__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+  gap: 16px;
+}
+
+.dr-state {
+  padding: 80px 20px;
+  text-align: center;
+  color: #8fa0bd;
+  font-size: 14px;
+}
+
+/* 比赛卡片 */
+.dr-card {
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #18264a, #152242);
+  border: 1px solid rgba(212,180,122,.18);
+  transition: .22s;
+}
+.dr-card:hover {
+  border-color: rgba(212,180,122,.45);
+  box-shadow: 0 24px 50px -30px rgba(212,180,122,.7);
+}
+
+.dr-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+}
+.dr-card__round {
+  font-weight: 900;
+  letter-spacing: .5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(212,180,122,.14);
+  border: 1px solid rgba(212,180,122,.34);
+  color: #e8cf9e;
+}
+.dr-card__time {
+  color: #8fa0bd;
+  font-weight: 800;
+  letter-spacing: .3px;
+}
+
+.dr-card__vs {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed rgba(212,180,122,.18);
+}
+.dr-card__team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.dr-card__team img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: contain;
+  padding: 4px;
+  background: rgba(255,255,255,.05);
+  border: 2px solid rgba(212,180,122,.4);
+}
+.dr-card__team span {
+  font-size: 13.5px;
+  font-weight: 900;
+  color: #fff;
+  text-align: center;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.dr-card__vs em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 900;
+  color: #d4b47a;
+  letter-spacing: 1.5px;
+}
+
+.dr-btn {
+  appearance: none;
+  padding: 9px 18px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: .2s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dr-btn--primary {
+  background: linear-gradient(135deg, #e8cf9e, #b8995c);
+  color: #0d1730;
+}
+.dr-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px -12px rgba(212,180,122,.9);
+}
+.dr-btn--ghost {
+  background: rgba(255,255,255,.05);
+  border-color: rgba(212,180,122,.42);
+  color: #e8cf9e;
+}
+.dr-btn--ghost:hover {
+  background: rgba(212,180,122,.1);
+}
+.dr-btn--tiny {
+  padding: 5px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+/* 多类型行 */
+.dr-card__types {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(212,180,122,.2);
+}
+.dr-card__type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dr-card__type-name {
+  flex: 0 0 90px;
+  font-size: 12px;
+  font-weight: 900;
+  color: #e8cf9e;
+  letter-spacing: .3px;
+}
+.dr-card__type-row input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #e2e9f5;
+  background: rgba(0,0,0,.24);
+  border: 1px solid rgba(212,180,122,.24);
+  border-radius: 6px;
+  outline: none;
+}
+
+/* ============================================================
+   封面页 · 舞台
+============================================================ */
+.dr-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #0a1228;
+}
+
+.dr-stage__cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 左右队伍容器 */
+.dr-stage__team {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4vh;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ★★★ 位置调整区 ★★★ */
+.dr-stage__team--a {
+  left: 26%;
+  top: 68%;
+}
+.dr-stage__team--b {
+  left: 74%;
+  top: 68%;
+}
+
+.dr-stage__logo {
+  width: 16vh;
+  height: 16vh;
+  border-radius: 50%;
+  object-fit: contain;
+  padding: 0.6vh;
+  background: rgba(0,0,0,.15);
+  filter: drop-shadow(0 1.2vh 2.4vh rgba(0,0,0,.65));
+}
+
+.dr-stage__name {
+  font-size: 3.4vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.4vh;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 0 2vh rgba(0,0,0,.9),
+    0 0.4vh 1vh rgba(0,0,0,.75),
+    0 0 1.6vh rgba(212,180,122,.4);
+}
+
+/* 悬浮返回按钮 */
+.dr-stage__toolbar {
+  position: absolute;
+  top: 2vh;
+  left: 2vh;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity .25s;
+}
+.dr-stage:hover .dr-stage__toolbar {
+  opacity: 1;
+}
+.dr-stage__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(0,0,0,.7);
+  border: 1px solid rgba(255,255,255,.2);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  backdrop-filter: blur(6px);
+}
+.dr-stage__back:hover {
+  background: rgba(212,180,122,.9);
+  color: #0d1730;
+}
+
+/* 加载 / 错误 */
+.dr-stage--loading,
+.dr-stage__error {
+  display: grid;
+  place-items: center;
+  color: #8fa0bd;
+  font-size: 14px;
+  letter-spacing: .5px;
+}
+.dr-stage__error {
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+  padding: 40px;
+}
+.dr-stage__error-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #ffb3c0;
+}
+.dr-stage__error-desc {
+  font-size: 13px;
+  color: #8fa0bd;
+}
+
+/* ============================================================
+   导播 · 比分板
+============================================================ */
+.dr-stage--sb {
+  display: grid;
+  place-items: center;
+}
+.dr-sb {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 4vh;
+  width: 88vw;
+  max-width: 1600px;
+  padding: 5vh 6vh;
+  border-radius: 3vh;
+  background: linear-gradient(160deg, rgba(13,23,48,.92), rgba(21,34,66,.92));
+  border: 0.3vh solid rgba(212,180,122,.4);
+  box-shadow: 0 0 6vh rgba(0,0,0,.6), inset 0 0 4vh rgba(212,180,122,.06);
+}
+.dr-sb__team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2vh;
+}
+.dr-sb__logo {
+  width: 14vh;
+  height: 14vh;
+  border-radius: 50%;
+  object-fit: contain;
+  padding: 0.6vh;
+  background: rgba(0,0,0,.2);
+  border: 0.4vh solid rgba(212,180,122,.5);
+  box-shadow: 0 0 3vh rgba(212,180,122,.35);
+}
+.dr-sb__name {
+  font-size: 3.6vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.4vh;
+  text-align: center;
+  text-shadow: 0 0 2vh rgba(0,0,0,.9), 0 0 1.6vh rgba(212,180,122,.5);
+  max-width: 32vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dr-sb__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5vh;
+}
+.dr-sb__status {
+  font-size: 1.6vh;
+  font-weight: 900;
+  letter-spacing: 0.6vh;
+  padding: 0.6vh 2vh;
+  border-radius: 999px;
+  background: rgba(255,255,255,.1);
+  color: #8fa0bd;
+  text-transform: uppercase;
+}
+.dr-sb__status.is-live {
+  color: #7ef0d0;
+  background: rgba(120,220,200,.15);
+  border: 0.2vh solid rgba(120,220,200,.5);
+}
+.dr-sb__status.is-finished {
+  color: #c4aef0;
+  background: rgba(166,139,212,.15);
+  border: 0.2vh solid rgba(166,139,212,.5);
+}
+.dr-sb__score {
+  display: flex;
+  align-items: center;
+  gap: 2vh;
+  font-size: 8vh;
+  font-weight: 900;
+  color: #e8cf9e;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1vh;
+  text-shadow: 0 0 4vh rgba(212,180,122,.6), 0 0 8vh rgba(212,180,122,.3);
+  line-height: 1;
+}
+.dr-sb__score em {
+  font-style: normal;
+  color: rgba(212,180,122,.7);
+  font-size: 6vh;
+}
+.dr-sb__num {
+  min-width: 6vh;
+  text-align: center;
+}
+.dr-sb__rounds {
+  display: flex;
+  gap: 1vh;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.dr-sb__round-pill {
+  padding: 0.4vh 1.2vh;
+  font-size: 1.3vh;
+  font-weight: 800;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  color: #8fa0bd;
+  border: 0.2vh solid rgba(212,180,122,.2);
+}
+.dr-sb__round-pill b {
+  color: #e8cf9e;
+  margin-left: 0.5vh;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   导播 · 首发名单
+============================================================ */
+.dr-stage--lineup {
+  display: grid;
+  place-items: center;
+  background: rgba(13,23,48,.92);
+}
+.dr-lu {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 3vh;
+  width: 90vw;
+  max-width: 1700px;
+  padding: 4vh 5vh;
+  border-radius: 3vh;
+  background: linear-gradient(160deg, rgba(13,23,48,.94), rgba(21,34,66,.94));
+  border: 0.3vh solid rgba(212,180,122,.4);
+  box-shadow: 0 0 6vh rgba(0,0,0,.6);
+}
+.dr-lu__side {
+  display: flex;
+  flex-direction: column;
+  gap: 2vh;
+}
+.dr-lu__divider {
+  width: 0.2vh;
+  background: linear-gradient(180deg, transparent, rgba(212,180,122,.5), transparent);
+}
+.dr-lu__team {
+  display: flex;
+  align-items: center;
+  gap: 1.5vh;
+  padding-bottom: 1.5vh;
+  border-bottom: 0.2vh dashed rgba(212,180,122,.3);
+}
+.dr-lu__team img {
+  width: 8vh;
+  height: 8vh;
+  border-radius: 50%;
+  object-fit: contain;
+  padding: 0.4vh;
+  background: rgba(0,0,0,.2);
+  border: 0.3vh solid rgba(212,180,122,.5);
+}
+.dr-lu__team span {
+  font-size: 3vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.3vh;
+  text-shadow: 0 0 1.5vh rgba(0,0,0,.9);
+}
+.dr-lu__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+}
+.dr-lu__group-title {
+  font-size: 1.6vh;
+  font-weight: 900;
+  letter-spacing: 0.4vh;
+  color: #e8cf9e;
+  text-transform: uppercase;
+}
+.dr-lu__players {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1vh;
+  padding: 0;
+  margin: 0;
+}
+.dr-lu__players li {
+  padding: 0.8vh 1.6vh;
+  font-size: 2vh;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(255,255,255,.08);
+  border: 0.2vh solid rgba(212,180,122,.3);
+  border-radius: 1vh;
+  letter-spacing: 0.2vh;
+  text-shadow: 0 0 1vh rgba(0,0,0,.8);
+}
+.dr-lu__pending {
+  padding: 2vh;
+  text-align: center;
+  color: #ffb3c0;
+  font-size: 2vh;
+  font-weight: 800;
+  background: rgba(255,110,130,.08);
+  border: 0.3vh dashed rgba(255,110,130,.4);
+  border-radius: 1.5vh;
+}
+
+/* ============================================================
+   导播 · 解说席
+============================================================ */
+.dr-stage--staff {
+  display: grid;
+  place-items: center;
+  background: rgba(13,23,48,.92);
+}
+.dr-staff {
+  width: 80vw;
+  max-width: 1400px;
+  padding: 4vh 5vh;
+  border-radius: 3vh;
+  background: linear-gradient(160deg, rgba(13,23,48,.94), rgba(21,34,66,.94));
+  border: 0.3vh solid rgba(212,180,122,.4);
+  box-shadow: 0 0 6vh rgba(0,0,0,.6);
+}
+.dr-staff__head {
+  padding-bottom: 2.5vh;
+  margin-bottom: 3vh;
+  border-bottom: 0.2vh dashed rgba(212,180,122,.3);
+}
+.dr-staff__vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+  font-size: 3vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.3vh;
+}
+.dr-staff__vs img {
+  width: 8vh;
+  height: 8vh;
+  border-radius: 50%;
+  object-fit: contain;
+  padding: 0.4vh;
+  background: rgba(0,0,0,.2);
+  border: 0.3vh solid rgba(212,180,122,.5);
+}
+.dr-staff__vs em {
+  font-style: normal;
+  color: #d4b47a;
+  font-size: 2vh;
+  letter-spacing: 0.6vh;
+}
+.dr-staff__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4vh;
+}
+.dr-staff__group-title {
+  font-size: 2.2vh;
+  font-weight: 900;
+  color: #e8cf9e;
+  letter-spacing: 0.5vh;
+  margin-bottom: 1.5vh;
+}
+.dr-staff__names {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  padding: 0;
+  margin: 0;
+}
+.dr-staff__names li {
+  font-size: 2.8vh;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.3vh;
+  padding: 1vh 0;
+  border-bottom: 0.15vh dashed rgba(212,180,122,.2);
+  text-shadow: 0 0 1.5vh rgba(0,0,0,.9);
+}
+.dr-staff__empty {
+  font-size: 2vh;
+  color: #8fa0bd;
+  padding: 1.5vh 0;
+  font-style: italic;
+}
+
+/* ============================================================
+   导播 · 下一场
+============================================================ */
+.dr-stage--next {
+  display: grid;
+  place-items: center;
+  background: rgba(13,23,48,.92);
+}
+.dr-next {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3vh;
+  padding: 5vh 8vh;
+  border-radius: 3vh;
+  background: linear-gradient(160deg, rgba(13,23,48,.94), rgba(21,34,66,.94));
+  border: 0.3vh solid rgba(212,180,122,.4);
+  box-shadow: 0 0 8vh rgba(212,180,122,.25);
+  text-align: center;
+}
+.dr-next__title {
+  font-size: 2.4vh;
+  font-weight: 900;
+  letter-spacing: 1.2vh;
+  color: #e8cf9e;
+  text-transform: uppercase;
+  padding-bottom: 2vh;
+  border-bottom: 0.2vh dashed rgba(212,180,122,.4);
+  width: 100%;
+}
+.dr-next__time {
+  font-size: 3.6vh;
+  font-weight: 900;
+  color: #7ef0d0;
+  letter-spacing: 0.6vh;
+  font-variant-numeric: tabular-nums;
+}
+.dr-next__vs {
+  display: flex;
+  align-items: center;
+  gap: 4vh;
+  font-size: 5vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.5vh;
+  text-shadow: 0 0 4vh rgba(212,180,122,.5);
+}
+.dr-next__vs em {
+  font-style: normal;
+  color: #d4b47a;
+  font-size: 3vh;
+  letter-spacing: 1vh;
+}
+.dr-next__empty {
+  font-size: 2.4vh;
+  color: #8fa0bd;
+  font-style: italic;
+}
+
+/* ============================================================
+   导播 · 倒计时
+============================================================ */
+.dr-stage--countdown {
+  display: grid;
+  place-items: center;
+  background: rgba(13,23,48,.94);
+}
+.dr-cd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3vh;
+  text-align: center;
+}
+.dr-cd__title {
+  font-size: 2.8vh;
+  font-weight: 900;
+  letter-spacing: 1.2vh;
+  color: #e8cf9e;
+  text-transform: uppercase;
+}
+.dr-cd__timer {
+  font-size: 14vh;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1vh;
+  line-height: 1;
+  text-shadow: 0 0 6vh rgba(212,180,122,.6), 0 0 12vh rgba(212,180,122,.3);
+}
+.dr-cd__vs {
+  display: flex;
+  align-items: center;
+  gap: 3vh;
+  font-size: 3.2vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 0.4vh;
+}
+.dr-cd__vs em {
+  font-style: normal;
+  color: #d4b47a;
+  font-size: 2.4vh;
+  letter-spacing: 0.6vh;
+}
+
+/* ============================================================
+   响应式
+============================================================ */
+@media (max-width: 720px) {
+  .dr-list { padding: 24px 16px 40px; }
+  .dr-list__grid { grid-template-columns: 1fr; }
+  .dr-lu { grid-template-columns: 1fr; }
+  .dr-lu__divider { display: none; }
+  .dr-staff__body { grid-template-columns: 1fr; }
+}
+/* ============================================================
+   导播 OBS 增强（透明叠加 / 使用引导 / 工具栏 / 角标）
+============================================================ */
+
+/* ---- 画面类型说明文字 ---- */
+.dr-card__type-desc {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #6f819f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+@media (max-width: 760px) {
+  .dr-card__type-desc { display: none; }
+}
+
+/* ---- OBS 使用引导 ---- */
+.dr-guide {
+  max-width: 1200px;
+  margin: 0 auto 22px;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(127,184,255,.08), rgba(212,180,122,.06));
+  border: 1px solid rgba(127,184,255,.22);
+}
+.dr-guide__title {
+  font-size: 13px;
+  font-weight: 900;
+  color: #7fb8ff;
+  margin-bottom: 10px;
+  letter-spacing: .4px;
+}
+.dr-guide__steps {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #c7d3e8;
+}
+.dr-guide__steps b { color: #e8cf9e; }
+.dr-guide__steps code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.3);
+  color: #e8cf9e;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+/* ---- 工具栏 / 透明开关 ---- */
+.dr-toolbar {
+  max-width: 1200px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.dr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.dr-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.dr-toggle__track {
+  position: relative;
+  width: 42px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(212,180,122,.35);
+  transition: .2s;
+  flex: none;
+}
+.dr-toggle__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #cfe2ff;
+  transition: .2s;
+}
+.dr-toggle input:checked + .dr-toggle__track {
+  background: linear-gradient(135deg, #e8cf9e, #b8995c);
+  border-color: transparent;
+}
+.dr-toggle input:checked + .dr-toggle__track::after {
+  left: 22px;
+  background: #0d1730;
+}
+.dr-toggle__label {
+  font-size: 13px;
+  font-weight: 800;
+  color: #e8cf9e;
+}
+.dr-toolbar__hint {
+  font-size: 12px;
+  color: #8fa0bd;
+}
+.dr-toolbar__hint code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.3);
+  color: #e8cf9e;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+/* ---- 画面右下角 OBS 角标 ---- */
+.dr-obs-tag {
+  position: absolute;
+  right: 2vh;
+  bottom: 2vh;
+  z-index: 9;
+  padding: 0.7vh 1.6vh;
+  border-radius: 1vh;
+  background: rgba(6,10,22,.55);
+  border: 0.15vh solid rgba(212,180,122,.35);
+  color: #e8cf9e;
+  font-size: 1.6vh;
+  font-weight: 800;
+  letter-spacing: .2vh;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.dr-obs-tag__alpha {
+  color: #7fb8ff;
+}
+
+/* ---- 比分板：待约赛状态 ---- */
+.dr-sb__status.is-pending {
+  background: rgba(127,184,255,.14);
+  color: #a9c7ef;
+}
+
+/* ---- 首发名单加载中 ---- */
+.dr-lu-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #8fa0bd;
+  font-size: 14px;
+}
+
+/* ============================================================
+   透明叠加模式（OBS 浏览器源「透明背景」）
+   开启 &bg=transparent 后：页面/舞台背景透明，仅叠加画面元素
+============================================================ */
+body.is-transparent .dr-stage {
+  background: transparent;
+}
+body.is-transparent .dr-stage__cover {
+  opacity: 0;
+}
+body.is-transparent .dr-sb {
+  background: rgba(6,12,28,.72);
+}
+body.is-transparent .dr-obs-tag {
+  background: rgba(6,10,22,.35);
+}
+
+/* ============================================================
+   即将开始 / 解说席模板画面（真实导播素材整图）
+============================================================ */
+.dr-starting__bg,
+.dr-staff__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.dr-stage--starting,
+.dr-stage--staff {
+  background: #000;
+}
+
+/* 解说席 · 解说行 / 裁判行（可被拖拽编辑器定位，默认居中） */
+.dr-staff__row {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 9vw;
+  transform: translate(-50%, -50%);
+  left: 50%;
+  top: 47%;
+  z-index: 5;
+  white-space: nowrap;
+}
+.dr-staff__row--judge {
+  left: 50%;
+  top: 72%;
+  gap: 2vw;
+}
+.dr-staff__person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1vh;
+}
+.dr-staff__avatar {
+  width: var(--dr-av, 12vh);
+  height: var(--dr-av, 12vh);
+  border-radius: 50%;
+  object-fit: cover;
+  border: 0.5vh solid rgba(212,180,122,.85);
+  box-shadow: 0 0 4vh rgba(212,180,122,.45);
+  background: rgba(0,0,0,.4);
+}
+.dr-staff__avatar--ph {
+  display: grid;
+  place-items: center;
+  font-size: 4.5vh;
+  background: rgba(20,32,64,.6);
+  color: #b9c6e0;
+}
+.dr-staff__pname {
+  font-size: 2.6vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: .2vh;
+  text-shadow: 0 0.3vh 1vh rgba(0,0,0,.9);
+}
+.dr-staff__divider {
+  width: 100%;
+  text-align: center;
+  font-size: 2vh;
+  font-weight: 800;
+  color: #e8cf9e;
+  text-shadow: 0 0 1.5vh rgba(0,0,0,.9);
+}
+.dr-staff__empty {
+  color: #dbe6f7;
+  font-size: 2.6vh;
+  font-weight: 700;
+  text-shadow: 0 0 2vh rgba(0,0,0,.9);
+}
+
+/* 封面 · 队名（无外框，仅文字；可被拖拽编辑器定位，默认分列 VS 两侧） */
+.dr-starting__team {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  font-size: 4.2vh;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: .3vh;
+  text-shadow: 0 0.4vh 1.2vh rgba(0,0,0,.95), 0 0 0.5vh rgba(0,0,0,.8);
+  white-space: nowrap;
+}
+.dr-starting__team--a { left: 55%; top: 40%; }
+.dr-starting__team--b { left: 83%; top: 40%; }
+
+/* ============================================================
+   两步选择：先选比赛 → 再选画面类型
+============================================================ */
+.dr-card--pick {
+  cursor: pointer;
+}
+.dr-card--pick:hover {
+  transform: translateY(-2px);
+  border-color: rgba(212,180,122,.6);
+  box-shadow: 0 26px 54px -28px rgba(212,180,122,.85);
+}
+.dr-card--pick:focus-visible {
+  outline: 2px solid rgba(127,184,255,.7);
+  outline-offset: 2px;
+}
+.dr-card__pick-btn {
+  margin-top: 14px;
+  padding: 10px 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  color: #0d1730;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #e8cf9e, #b8995c);
+}
+
+/* 比赛页头：返回按钮 + 队名 VS 队名 */
+.dr-list__head--back {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.dr-list__head--back h1 {
+  font-size: clamp(20px, 2.6vw, 30px);
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: #fff;
+}
+.dr-head-team {
+  color: #fff;
+}
+.dr-head-vs {
+  color: #e8cf9e;
+  letter-spacing: .3vw;
+}

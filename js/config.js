@@ -16,7 +16,8 @@ export const ROLE_LABELS = {
   admin: '管理员',
   team:  '队伍队长',
   judge: '裁判',
-  commentator: '解说'
+  commentator: '解说',
+  beta:  '绝版内测人'
 };
 
 export const THANKS_SUB_MAP = {
@@ -125,6 +126,14 @@ export const TOOLS_DEF = [
     roles: ['admin']
   },
   {
+    id: 'adminHub',
+    section: 'admin',
+    icon: '🛠️',
+    title: '后台管理',
+    desc: '比分补录、竞猜结算与队伍管理集中入口',
+    roles: ['admin']
+  },
+  {
     id: 'draw',
     section: 'admin',
     icon: '🎲',
@@ -156,6 +165,22 @@ export const TOOLS_DEF = [
     desc: '为赛程中的对阵选择并提交比赛时间',
     roles: ['team', 'admin'],
     requiresSchool: true
+  },
+  {
+    id: 'guess',
+    section: 'beta',
+    icon: '🔮',
+    title: '赛事竞猜',
+    desc: '对赛程每场比赛预测胜方，比完按比分结算积分',
+    roles: ['admin', 'beta']
+  },
+  {
+    id: 'goVote',
+    section: 'beta',
+    icon: '🔥',
+    title: '打 Call',
+    desc: '前往队伍信息 / 工作人员，为支持的队伍或人员打 Call',
+    roles: ['admin', 'beta']
   }
 ];
 
@@ -164,7 +189,8 @@ export const SECTION_LABELS = {
   referee:     { title: '裁判工具', sub: 'REFEREE' },
   commentator: { title: '解说工具', sub: 'COMMENTATOR' },
   team:        { title: '队伍工具', sub: 'TEAM' },
+  beta:        { title: '绝版内测', sub: 'BETA' },
   admin:       { title: '管理员工具', sub: 'ADMIN' }
 };
 
-export const SECTION_ORDER = ['public', 'referee', 'commentator', 'team', 'admin'];
+export const SECTION_ORDER = ['public', 'referee', 'commentator', 'beta', 'team', 'admin'];

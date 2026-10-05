@@ -4,13 +4,13 @@
 
 import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
-} from './config.js';
+} from './config.js?v=20261005-07';
 import { apiRequest, getCurrentUser } from './api.js';
 import {
   sanitize, getInitialFromName,
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
-import { fetchTeams, invalidateTeams, showActionNotice } from './content.js';
+import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261005-07';
 import {
   TOURNAMENT_TYPES,
   TOURNAMENT_TYPE_LABELS,
@@ -162,6 +162,10 @@ export function renderToolsPanel() {
         window.__openMyMatchesPage?.();
         return;
       }
+      if (id === 'goVote') {
+        document.querySelector('.tab[data-tab="teams"]')?.click();
+        return;
+      }
       openToolModal(id);
     });
   });
@@ -240,6 +244,14 @@ async function openToolModal(toolId) {
     box.innerHTML = '<div class="board__state">加载中…</div>';
     window.__toolModal.openModal();
     await loadMatchBookingTool(box);
+  } else if (toolId === 'guess') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadGuessTool(box);
+  } else if (toolId === 'adminHub') {
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    window.__toolModal.openModal();
+    await loadAdminHub(box);
   }
 }
 
@@ -1483,6 +1495,265 @@ function renderPlayersList(list, school) {
       ${coach ? `<li class="tool-list__item"><div class="tool-list__body"><div class="tool-list__title">🧑‍🏫 教练：${sanitize(coach.name)}</div></div></li>` : ''}
     </ul>
   `;
+}
+
+/* ============================================================
+   赛事竞猜（仅绝版内测人与管理员）
+============================================================ */
+async function loadGuessTool(box) {
+  const u = getCurrentUser();
+  if (!u || !['admin', 'beta'].includes(u.role)) {
+    box.innerHTML = '<div class="tool-modal__info">仅绝版内测人与管理员可用。</div>';
+    return;
+  }
+
+  let schedule = null, nameMap = {};
+  try {
+    const sd = await apiRequest('/api/schedule');
+    schedule = sd.schedule;
+    const td = await fetchTeams().catch(() => ({ teams: [] }));
+    (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+    return;
+  }
+  if (!schedule || !schedule.id) {
+    box.innerHTML = '<h3 class="tool-modal__title">赛事竞猜 <em>BETA</em></h3><div class="tool-modal__info">尚未发布赛程，暂无竞猜。</div>';
+    return;
+  }
+
+  let mine = { matches: [] };
+  try { mine = await apiRequest('/api/guesses/mine?schedule_id=' + schedule.id); } catch (e) {}
+  let lb = { leaderboard: [] };
+  try { lb = await apiRequest('/api/guesses/leaderboard?schedule_id=' + schedule.id); } catch (e) {}
+  let champ = null;
+  try { champ = await apiRequest('/api/guesses/champion/mine?schedule_id=' + schedule.id); } catch (e) {}
+
+  box.innerHTML = `
+    <h3 class="tool-modal__title">赛事竞猜 <em>BETA</em></h3>
+    <p class="tool-modal__sub">${sanitize(schedule.title || '当前赛程')} · 对已约赛的每场比赛预测胜方，比完按比分自动结算；另可预测本届冠军。</p>
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>🏆 冠军竞猜</h4><span class="tool-modal__count">预测本届冠军</span></div>
+      <div id="champBlock">加载中…</div>
+    </section>
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>对阵预测</h4><span class="tool-modal__count" id="guessCount">${(mine.matches || []).length} 场</span></div>
+      <div class="guess-list" id="guessList"></div>
+    </section>
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>积分榜</h4></div>
+      <ul class="tool-list" id="guessBoard"></ul>
+    </section>
+  `;
+
+  renderChampionBlock(box, champ, nameMap, schedule.id);
+  renderGuessList(box, mine.matches || [], nameMap, schedule.id);
+  renderGuessBoard(box, lb.leaderboard || []);
+}
+
+function renderChampionBlock(box, champ, nameMap, scheduleId) {
+  const block = box.querySelector('#champBlock');
+  if (!block) return;
+  const settled = !!champ?.settled;
+  const champion = champ?.champion || null;
+  const myPick = champ?.pick || '';
+  const teams = Object.keys(nameMap);
+  const championName = champion ? (nameMap[champion] || champion) : '';
+
+  let html;
+  if (settled) {
+    html = `
+      <div class="champ-result">
+        <div class="champ-result__line">🏆 本届冠军：<b>${sanitize(championName)}</b></div>
+        <div class="champ-result__mine ${champ.correct ? 'is-correct' : 'is-wrong'}">
+          ${myPick ? `你预测：${sanitize(nameMap[myPick] || myPick)} · ${champ.correct ? '✓ 猜中冠军' : '✗ 未中'}` : '你未参与冠军竞猜'}
+        </div>
+      </div>
+    `;
+  } else {
+    html = `
+      <div class="champ-form">
+        <select id="champPick">
+          <option value="">请选择预测的冠军队伍</option>
+          ${teams.map(s => `<option value="${sanitize(s)}" ${myPick === s ? 'selected' : ''}>${sanitize(nameMap[s])}</option>`).join('')}
+        </select>
+        <button class="btn btn--primary btn--sm" id="champSave" type="button">${myPick ? '更新预测' : '提交'}</button>
+      </div>
+    `;
+  }
+  block.innerHTML = html;
+
+  const save = block.querySelector('#champSave');
+  if (save) {
+    save.addEventListener('click', async () => {
+      const pick = block.querySelector('#champPick').value;
+      if (!pick) { showActionNotice('请选择预测的冠军队伍', true); return; }
+      const orig = save.textContent;
+      save.disabled = true;
+      save.textContent = '提交中…';
+      try {
+        await apiRequest('/api/guesses/champion', { method: 'POST', body: JSON.stringify({ schedule_id: scheduleId, pick }) });
+        showActionNotice('冠军预测已提交');
+        await loadGuessTool(box);
+      } catch (err) {
+        showActionNotice(err.message || '提交失败', true);
+        save.disabled = false;
+        save.textContent = orig;
+      }
+    });
+  }
+}
+
+function renderGuessList(box, matches, nameMap, scheduleId) {
+  const list = box.querySelector('#guessList');
+  const nm = (s) => nameMap[s] || s || '轮空';
+  list.innerHTML = matches.map(m => {
+    const aName = nm(m.team_a), bName = nm(m.team_b);
+    const finished = m.is_finished;
+    const booked = !!m.is_booked;
+    const started = booked && !!m.start_time && new Date(m.start_time).getTime() <= Date.now();
+    const scoreStr = finished ? `${m.score_a}:${m.score_b}` : '';
+    const statusTag = finished
+      ? (m.correct ? '<span class="guess-status is-correct">✓ 猜中</span>' : '<span class="guess-status is-wrong">✗ 未中</span>')
+      : (booked && !started
+          ? '<span class="guess-status is-open">已约赛 · 待开赛</span>'
+          : booked ? '<span class="guess-status is-closed">已开赛 · 预测截止</span>' : '<span class="guess-status is-locked">待约赛</span>');
+    const lockedText = booked ? '该场比赛已开始，预测已截止' : '该场尚未约赛，暂不能预测';
+    return `
+      <div class="guess-row">
+        <div class="guess-row__vs">
+          <b>${sanitize(aName)}</b><em>VS</em><b>${sanitize(bName)}</b>
+          ${finished ? `<span class="guess-row__score">${sanitize(scoreStr)}</span>` : ''}
+        </div>
+        <div class="guess-row__pick">
+          ${finished ? statusTag : (booked && !started ? `
+            <label><input type="radio" name="guess_${m.match_index}" value="${sanitize(m.team_a)}" ${m.pick === m.team_a ? 'checked' : ''}> ${sanitize(aName)}</label>
+            <label><input type="radio" name="guess_${m.match_index}" value="${sanitize(m.team_b)}" ${m.pick === m.team_b ? 'checked' : ''}> ${sanitize(bName)}</label>
+            <button class="btn btn--primary btn--sm" data-guess-save="${m.match_index}" type="button">提交</button>
+          ` : `<span class="guess-row__locked">${lockedText}</span>`)}
+        </div>
+      </div>
+    `;
+  }).join('') || '<div class="tool-list__empty">暂无对阵</div>';
+
+  list.querySelectorAll('[data-guess-save]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const mi = btn.dataset.guessSave;
+      const sel = list.querySelector(`input[name="guess_${mi}"]:checked`);
+      if (!sel) { showActionNotice('请先选择预测的队伍', true); return; }
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '提交中…';
+      try {
+        await apiRequest('/api/guesses', {
+          method: 'POST',
+          body: JSON.stringify({ schedule_id: scheduleId, match_index: Number(mi), pick: sel.value })
+        });
+        showActionNotice('竞猜已提交');
+        await loadGuessTool(box);
+      } catch (err) {
+        showActionNotice(err.message || '提交失败', true);
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
+    });
+  });
+}
+
+/* 后台管理（仅管理员）：比分补录 + 竞猜结算 + 队伍管理入口 */
+async function loadAdminHub(box) {
+  const u = getCurrentUser();
+  if (!u || u.role !== 'admin') {
+    box.innerHTML = '<div class="tool-modal__info">仅管理员可用。</div>';
+    return;
+  }
+
+  let schedule = null, appointments = [], nameMap = {}, lb = { leaderboard: [] };
+  try {
+    const sd = await apiRequest('/api/schedule');
+    schedule = sd.schedule;
+    if (!schedule || !schedule.matches) {
+      box.innerHTML = '<div class="tool-modal__info">尚未发布赛程。</div>';
+      return;
+    }
+    const appt = await apiRequest('/api/match-appointments?schedule_id=' + schedule.id).catch(() => ({ appointments: [] }));
+    appointments = appt.appointments || [];
+    const td = await fetchTeams().catch(() => ({ teams: [] }));
+    (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+    lb = await apiRequest('/api/guesses/leaderboard?schedule_id=' + schedule.id).catch(() => ({ leaderboard: [] }));
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+    return;
+  }
+
+  const flatMatches = [];
+  if (Array.isArray(schedule.matches)) flatMatches.push(...schedule.matches);
+  else if (schedule.matches.rounds) schedule.matches.rounds.forEach(r => (r.matches || []).forEach(m => flatMatches.push(m)));
+  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
+
+  const matchRows = flatMatches.map((m, i) => {
+    const appt = appointmentByIndex.get(i);
+    const aName = nameMap[m.a] || m.a || '轮空', bName = nameMap[m.b] || m.b || '轮空';
+    const st = appt?.is_finished ? '已完赛' : appt ? '已约赛' : '待约赛';
+    const sc = appt?.is_finished ? `${appt.score_a}:${appt.score_b}` : '—';
+    return `<button class="adm-row" data-adm-match="${i}" type="button">
+      <span class="adm-row__a">${sanitize(aName)}</span>
+      <em class="adm-row__score">${sanitize(sc)}</em>
+      <span class="adm-row__b">${sanitize(bName)}</span>
+      <i class="adm-row__state">${st} ›</i>
+    </button>`;
+  }).join('') || '<div class="tool-list__empty">暂无对阵</div>';
+
+  const board = lb.leaderboard || [];
+  const lbHtml = board.length
+    ? board.map((p, i) => `<li class="tool-list__item"><div class="tool-list__body"><div class="tool-list__title">#${i + 1} ${sanitize(p.username)}</div><div class="tool-list__meta"><span>猜中 <b>${p.correct}</b> / ${p.total} 场</span></div></div></li>`).join('')
+    : '<li class="tool-list__empty">暂无竞猜记录</li>';
+
+  box.innerHTML = `
+    <h3 class="tool-modal__title">后台管理 <em>ADMIN</em></h3>
+    <p class="tool-modal__sub">比分补录、竞猜结算与队伍管理集中入口。</p>
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>比分补录</h4><span class="tool-modal__count">${flatMatches.length} 场</span></div>
+      <div class="adm-list">${matchRows}</div>
+      <p class="tool-modal__hint">点击某场补录比分，弹出该场详情（管理员可录入局比分）。</p>
+    </section>
+    <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>竞猜结算</h4></div>
+      <ul class="tool-list">${lbHtml}</ul>
+    </section>
+    <section class="tool-modal__section">
+      <button class="btn btn--ghost btn--sm" id="admGoTeams" type="button">前往队伍管理 →</button>
+    </section>
+  `;
+
+  box.querySelectorAll('[data-adm-match]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.admMatch);
+      showMatchDetails(flatMatches[idx], appointmentByIndex.get(idx));
+    });
+  });
+  const gt = box.querySelector('#admGoTeams');
+  if (gt) gt.addEventListener('click', () => {
+    document.querySelector('.tab[data-tab="teams"]')?.click();
+    window.__toolModal.close?.();
+  });
+}
+
+function renderGuessBoard(box, board) {
+  const ul = box.querySelector('#guessBoard');
+  if (!ul) return;
+  if (!board.length) {
+    ul.innerHTML = '<li class="tool-list__empty">暂无竞猜记录</li>';
+    return;
+  }
+  ul.innerHTML = board.map((p, i) => `
+    <li class="tool-list__item">
+      <div class="tool-list__body">
+        <div class="tool-list__title">#${i + 1} ${sanitize(p.username)}</div>
+        <div class="tool-list__meta"><span>猜中 <b>${p.correct}</b> / ${p.total} 场</span></div>
+      </div>
+    </li>
+  `).join('');
 }
 
 /* ============================================================

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>首发名单 · IVSCL & IVSL</title>
+<link rel="stylesheet" href="css/style.css?v=20261004-10">
+<link rel="stylesheet" href="css/lineups.css?v=1">
+<link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <a class="brand" href="/" aria-label="返回首页">
+      <span class="brand__marks">
+        <img class="brand__logo" src="assets/loge/loge_IVSCL.jpg" alt="IVSCL logo">
+        <span class="brand__join">×</span>
+        <img class="brand__logo brand__logo--b" src="assets/loge/loge_IVSL.jpg" alt="IVSL logo">
+      </span>
+      <span class="brand__text">
+        <b>IVSCL &amp; IVSL</b>
+        <em>首发名单 · LINEUPS</em>
+      </span>
+    </a>
+    <div class="topbar__actions">
+      <a class="btn btn--ghost btn--sm" href="/">← 返回主站</a>
+    </div>
+  </div>
+</header>
+
+<main class="lu-main">
+  <div class="wrap">
+    <div class="lu-head">
+      <h1 class="lu-head__title" id="luTitle">首发名单展示</h1>
+      <p class="lu-head__sub" id="luSub">查看每场比赛双方提交的首发名单与解说席</p>
+    </div>
+
+    <div class="lu-toolbar">
+      <input type="search" id="luSearch" placeholder="搜索队伍 / 选手" autocomplete="off">
+      <select id="luFilter">
+        <option value="all">全部比赛</option>
+        <option value="booked">已约赛</option>
+        <option value="finished">已完赛</option>
+        <option value="has-lineup">已提交首发</option>
+        <option value="missing-lineup">未提交首发</option>
+      </select>
+      <span class="lu-toolbar__count" id="luCount"></span>
+    </div>
+
+    <div id="luContent" class="lu-list">
+      <div class="lu-state">加载中…</div>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <p class="footer__copy">© 2026 IVSCL &amp; IVSL 联合赛事组委会</p>
+  </div>
+</footer>
+
+<script type="module" src="js/lineups.js?v=1"></script>
+</body>
+</html>

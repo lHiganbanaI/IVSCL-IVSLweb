@@ -1,5 +1,5 @@
 /* ============================================================
-   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分、队长管理
+   内容加载：公告、Q&A、队伍、历届冠亚军、特别鸣谢、赛程、比分
 ============================================================ */
 
 import { apiRequest, getCurrentUser } from './api.js';
@@ -9,59 +9,68 @@ import {
   HISTORY_LOGO_DIR, HISTORY_LOGO_EXT,
   THANKS_SUB_MAP,
   DEFAULT_QAS, DEFAULT_HISTORY, DEFAULT_THANKS
-} from './config.js';
+} from './config.js?v=20261005-07';
 import { parseTournament } from './tournament.js';
+import { showActionNotice, showAlert, showConfirm } from './ui-toast.js';
+import { shareUrl, buildMatchShareUrl } from './share.js';
+import { store } from './store.js';
+import { fetchVotes, voteCount, hasVoted, bindVoteButton } from './votes.js';
+
+/* 向后兼容 re-export */
+export { showActionNotice, showAlert, showConfirm };
 
 /* ============================================================
-   /api/teams 请求缓存
+   打 Call 按钮统一填充（队伍卡片 / 工作人员行共用）
+   container 内所有 .vote-btn[data-vote-target] 参与
 ============================================================ */
-let __teamsPromise = null;
-let __teamLogosPromise = null;
-
-export function showActionNotice(message, isError = false) {
-  let notice = document.getElementById('actionNotice');
-  if (!notice) {
-    notice = document.createElement('div');
-    notice.id = 'actionNotice';
-    notice.className = 'action-notice';
-    notice.setAttribute('role', 'status');
-    notice.setAttribute('aria-live', 'polite');
-    document.body.appendChild(notice);
-  }
-  notice.textContent = message;
-  notice.classList.toggle('action-notice--error', isError);
-  notice.classList.add('is-visible');
-  clearTimeout(notice._hideTimer);
-  notice._hideTimer = setTimeout(() => notice.classList.remove('is-visible'), 3200);
-}
-
-export function fetchTeams() {
-  if (!__teamsPromise) {
-    __teamsPromise = apiRequest('/api/teams?basic=1').catch(err => {
-      __teamsPromise = null;
-      throw err;
+let __votesData = null;
+const __canVote = () => ['admin', 'beta'].includes(getCurrentUser()?.role);
+async function hydrateVoteButtons(container) {
+  const btns = container.querySelectorAll('.vote-btn[data-vote-target]');
+  if (!btns.length) return;
+  /* 先拉数据（失败则保持 0 计数，不影响按钮绑定） */
+  let data = null;
+  try { data = await fetchVotes(); } catch { /* 忽略，按钮仍可点击 */ }
+  if (data) __votesData = data;
+  btns.forEach(btn => {
+    const type = btn.dataset.voteTarget;
+    const key = btn.dataset.voteKey;
+    if (data) {
+      const count = voteCount(data, type, key);
+      btn.dataset.voteCount = String(count);
+      btn.textContent = `🔥 ${count}`;
+      btn.classList.toggle('is-active', hasVoted(data, type, key));
+    }
+    bindVoteButton(btn, type, key, (res, el) => {
+      el.dataset.voteCount = String(res.count);
+      el.textContent = `🔥 ${res.count}`;
+      el.classList.toggle('is-active', res.voted);
+      if (__votesData) {
+        const map = type === 'team' ? __votesData.teams : __votesData.staff;
+        if (map) map[key] = res.count;
+        __votesData.mine = __votesData.mine || { team: [], staff: [] };
+        const arr = type === 'team' ? __votesData.mine.team : __votesData.mine.staff;
+        const i = arr.indexOf(key);
+        if (res.voted) { if (i < 0) arr.push(key); }
+        else if (i >= 0) arr.splice(i, 1);
+      }
     });
-  }
-  return __teamsPromise;
+  });
 }
-
-export function fetchTeamLogos() {
-  if (!__teamLogosPromise) {
-    __teamLogosPromise = apiRequest('/api/team-logos').catch(err => {
-      __teamLogosPromise = null;
-      throw err;
-    });
-  }
-  return __teamLogosPromise;
-}
-
-export function invalidateTeams() {
-  __teamsPromise = null;
-  __teamLogosPromise = null;
+export function refreshVotes() {
+  __votesData = null;
 }
 
 /* ============================================================
-   公告栏（支持置顶）
+   /api/teams 请求缓存 → 由 DataStore 统一持有
+   保留转发导出以兼容 tools.js / my-matches.js 等旧调用
+============================================================ */
+export const fetchTeams = () => store.fetchTeams();
+export const fetchTeamLogos = () => store.fetchTeamLogos();
+export const invalidateTeams = () => store.invalidateTeams();
+
+/* ============================================================
+   公告栏
 ============================================================ */
 function renderAnnouncements(list, container) {
   if (!list || !list.length) {
@@ -95,7 +104,7 @@ export async function loadAnnouncements() {
   if (!box) return;
 
   try {
-    const data = await apiRequest('/api/announcements');
+    const data = await store.loadAnnouncements();
     const list = data.announcements || [];
     const n = renderAnnouncements(list, box);
     if (cnt) cnt.textContent = n + ' 条';
@@ -177,14 +186,14 @@ export async function loadHomeSchedule() {
 
   try {
     const [scheduleData, teamData] = await Promise.all([
-      apiRequest('/api/schedule').catch(() => ({})),
+      store.loadSchedule().catch(() => ({})),
       fetchTeams().catch(() => ({ teams: [] }))
     ]);
     schedule = scheduleData.schedule;
     (teamData.teams || []).forEach(t => { nameMap[t.short] = t.name; });
 
     if (schedule && schedule.matches) {
-      const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] }));
+      const appointmentData = await store.loadAppointments(schedule.id).catch(() => ({ appointments: [] }));
       appointments = appointmentData.appointments || [];
     }
   } catch (err) {
@@ -230,11 +239,11 @@ export async function loadHomeSchedule() {
     const pad = n => String(n).padStart(2, '0');
     const dStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     return dStr === todayStr;
-  }).slice(0, 2);   // 最多显示 2 条
+  }).slice(0, 2);
 
   let label = '今日';
   if (!show.length) {
-    show = upcoming.slice(0, 2);   // 降级时也只显示 2 条
+    show = upcoming.slice(0, 2);
     label = '近期';
   }
 
@@ -244,7 +253,7 @@ export async function loadHomeSchedule() {
     return;
   }
 
-    box.innerHTML = show.map(item => {
+  box.innerHTML = show.map(item => {
     const aName = nameMap[item.match.a] || item.match.a || '轮空';
     const bName = nameMap[item.match.b] || item.match.b || '轮空';
     const timeStr = item.appointment?.start_time
@@ -263,7 +272,7 @@ export async function loadHomeSchedule() {
         </div>
       </li>
     `;
-    }).join('');
+  }).join('');
   box.setAttribute('aria-busy', 'false');
 }
 
@@ -280,14 +289,14 @@ export async function loadHomeResults() {
 
   try {
     const [scheduleData, teamData] = await Promise.all([
-      apiRequest('/api/schedule').catch(() => ({})),
+      store.loadSchedule().catch(() => ({})),
       fetchTeams().catch(() => ({ teams: [] }))
     ]);
     schedule = scheduleData.schedule;
     (teamData.teams || []).forEach(t => { nameMap[t.short] = t.name; });
 
     if (schedule && schedule.matches) {
-      const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${schedule.id}`).catch(() => ({ appointments: [] }));
+      const appointmentData = await store.loadAppointments(schedule.id).catch(() => ({ appointments: [] }));
       appointments = appointmentData.appointments || [];
     }
   } catch (err) {
@@ -378,9 +387,12 @@ export function renderTeams(list, container, opts = {}) {
         </div>
         <h3 class="team-card__name">${name}</h3>
         <span class="team-card__short">${short}</span>
+        ${editMode ? '' : (__canVote() ? `<button class="vote-btn team-card__vote" data-vote-target="team" data-vote-key="${short}" type="button" aria-label="为 ${name} 打 Call">🔥 0</button>` : '')}
       </div>
     `;
   }).join('');
+
+  if (!editMode) hydrateVoteButtons(container);
 
   const search = document.getElementById('teamsSearch');
   const count = document.getElementById('teamsResultCount');
@@ -421,12 +433,12 @@ async function refreshMySchool() {
   __myTeamInfo = null;
   if (user?.role === 'team') {
     try {
-      const d = await apiRequest('/api/team/school').catch(() => ({}));
+      const d = await store.loadMySchool().catch(() => ({}));
       __mySchool = d.profile?.school || null;
     } catch {}
     if (__mySchool) {
       try {
-        const td = await apiRequest('/api/teams').catch(() => ({}));
+        const td = await store.loadTeamsFull().catch(() => ({}));
         const found = (td.teams || []).find(t => t.short === __mySchool);
         if (found) __myTeamInfo = found;
       } catch {}
@@ -482,7 +494,6 @@ async function renderTeamsByTab() {
   if (__currentTeamsTab === 'mine') {
     if (searchBar) searchBar.hidden = true;
 
-    /* ---------- 未绑定：显示"绑定 / 创建"两个按钮 ---------- */
     if (!__mySchool) {
       grid.innerHTML = '';
       grid.hidden = true;
@@ -512,13 +523,11 @@ async function renderTeamsByTab() {
       return;
     }
 
-    /* ---------- 已绑定：显示自己那支队伍 ---------- */
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
     const mine = __teamsListCache.filter(t => t.short === __mySchool);
     renderTeams(mine, grid, { editMode: true });
   } else {
-    /* 所有队伍 */
     if (searchBar) searchBar.hidden = false;
     if (mineEmpty) mineEmpty.hidden = true;
     grid.hidden = false;
@@ -684,7 +693,7 @@ async function showTeamAdminDetail(school) {
   let players = [];
   let coachName = '';
   try {
-    const pd = await apiRequest('/api/team/players?school=' + encodeURIComponent(school));
+    const pd = await store.loadPlayers(school);
     const list = pd.players || [];
     players = list.filter(x => !x.is_coach);
     coachName = (list.find(x => x.is_coach) || {}).name || '';
@@ -745,7 +754,7 @@ async function showTeamAdminDetail(school) {
 }
 
 /* ============================================================
-   内嵌队伍编辑面板 —— 打开 / 关闭
+   内嵌面板：打开 / 关闭
 ============================================================ */
 function showTeamEditorPanel() {
   const panel = document.getElementById('teamEditorPanel');
@@ -773,7 +782,7 @@ function closeTeamEditorPanel() {
 }
 
 /* ============================================================
-   绑定已有队伍：内嵌面板
+   绑定已有队伍
 ============================================================ */
 async function openTeamBindPanel() {
   const panel = document.getElementById('teamBindPanel');
@@ -785,7 +794,6 @@ async function openTeamBindPanel() {
   panel.innerHTML = '<div class="board__state" style="padding:60px 20px">加载学校列表中…</div>';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  /* 拉取队伍列表 */
   let teams = (__teamsListCache || []).slice();
   if (!teams.length) {
     try {
@@ -798,7 +806,6 @@ async function openTeamBindPanel() {
     }
   }
 
-  /* 拉取所有队伍 Logo */
   let logoMap = {};
   try {
     const ld = await fetchTeamLogos();
@@ -871,13 +878,11 @@ async function openTeamBindPanel() {
 
           await refreshMySchool();
 
-          /* 关闭绑定面板，回到我的队伍 */
           panel.hidden = true;
           panel.innerHTML = '';
           mainView.hidden = false;
           await renderTeamsByTab();
 
-          /* 关键：自动打开「编辑队员」面板，让用户立即上传选手信息 */
           await openPlayerEditorPanel(school);
 
           if (window.app?.renderToolsPanel) window.app.renderToolsPanel();
@@ -906,7 +911,7 @@ async function openTeamBindPanel() {
 }
 
 /* ============================================================
-   通用工具：图片压缩
+   通用：图片压缩
 ============================================================ */
 const PLAYER_POSITIONS = ['求生', '监管', '双边'];
 
@@ -990,7 +995,7 @@ function collectPlayersFromPanel(panel) {
 }
 
 /* ============================================================
-   创建队伍：内嵌面板
+   创建队伍
 ============================================================ */
 let __createState = { pendingLogo: null };
 
@@ -1004,7 +1009,7 @@ async function openTeamEditorPanel(school) {
   let coachName = '';
   if (school) {
     try {
-      const pd = await apiRequest('/api/team/players');
+      const pd = await store.loadPlayers();
       const list = pd.players || [];
       players = list.filter(x => !x.is_coach).map(x => ({
         name: x.name, cn_short: x.cn_short || '', uid: x.uid || '', position: x.position || '求生'
@@ -1092,7 +1097,7 @@ async function openTeamEditorPanel(school) {
   fileInput?.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
     if (!file) { __createState.pendingLogo = null; return; }
-    if (file.size > 5 * 1024 * 1024) { alert('图片过大（超过 5MB）'); fileInput.value = ''; return; }
+    if (file.size > 5 * 1024 * 1024) { showAlert('图片过大（超过 5MB）'); fileInput.value = ''; return; }
     try {
       const dataUrl = await compressImage(file, 300, 0.78);
       __createState.pendingLogo = dataUrl;
@@ -1100,7 +1105,7 @@ async function openTeamEditorPanel(school) {
       if (previewInfo) previewInfo.textContent = `已选择 ${file.name}（压缩后 ${Math.round(dataUrl.length/1024)} KB）`;
       if (preview) preview.hidden = false;
     } catch (err) {
-      alert('图片处理失败：' + err.message);
+      showAlert('图片处理失败：' + err.message);
       fileInput.value = '';
     }
   });
@@ -1194,7 +1199,7 @@ async function openTeamEditorPanel(school) {
 }
 
 /* ============================================================
-   编辑选手：内嵌面板（学校信息只读）
+   编辑选手
 ============================================================ */
 async function openPlayerEditorPanel(school) {
   const panel = document.getElementById('teamEditorPanel');
@@ -1208,7 +1213,7 @@ async function openPlayerEditorPanel(school) {
   let players = [];
   let coachName = '';
   try {
-    const pd = await apiRequest('/api/team/players');
+    const pd = await store.loadPlayers();
     const list = pd.players || [];
     players = list.filter(x => !x.is_coach).map(x => ({
       name: x.name, cn_short: x.cn_short || '', uid: x.uid || '', position: x.position || '求生'
@@ -1486,7 +1491,7 @@ export async function loadStaff() {
   if (!box) return;
   box.setAttribute('aria-busy', 'true');
   try {
-    const data = await apiRequest('/api/staff');
+    const data = await store.loadStaff();
     const staff = Array.isArray(data.staff) ? data.staff : [];
     const groups = [
       { role: 'judge', title: '裁判', sub: 'REFEREES', icon: '⚖️' },
@@ -1495,11 +1500,19 @@ export async function loadStaff() {
     box.innerHTML = groups.map(group => {
       const names = staff.filter(person => person.role === group.role);
       const rows = names.length
-        ? names.map(person => `
+        ? names.map(person => {
+            const uname = person.username || '未命名';
+            const initial = sanitize(String(uname).slice(0, 1).toUpperCase());
+            return `
             <li class="staff-name-row">
-              <span class="staff-name-row__name">${sanitize(person.username || '未命名')}</span>
+              ${person.avatar
+                ? `<img class="staff-avatar" src="${sanitize(person.avatar)}" alt="" loading="lazy">`
+                : `<span class="staff-avatar staff-avatar--fallback" aria-hidden="true">${initial}</span>`}
+              <span class="staff-name-row__name">${sanitize(uname)}</span>
+              ${__canVote() ? `<button class="vote-btn" data-vote-target="staff" data-vote-key="${sanitize(uname)}" type="button" aria-label="为 ${sanitize(uname)} 打 Call">🔥 0</button>` : ''}
             </li>
-          `).join('')
+          `;
+          }).join('')
         : '<li class="staff-empty">暂未登记</li>';
       return `
         <article class="thanks-card staff-card">
@@ -1512,6 +1525,7 @@ export async function loadStaff() {
         </article>
       `;
     }).join('');
+    hydrateVoteButtons(box);
   } catch (err) {
     box.innerHTML = `<div class="board__state" style="grid-column:1/-1">工作人员名单暂时无法加载：${sanitize(err.message)}</div>`;
   }
@@ -1526,15 +1540,16 @@ function teamLogoSrc(short, logoMap) {
   return `${TEAM_LOGO_DIR}loge_${sanitize(short || '')}${TEAM_LOGO_EXT}`;
 }
 
-function scheduleSideHtml(short, logoMap, nameMap) {
+function scheduleSideHtml(short, logoMap, nameMap, win = false) {
   const shortSafe = sanitize(short || '轮空');
   const name = sanitize(nameMap && nameMap[short] ? nameMap[short] : (short || '轮空'));
   const src = teamLogoSrc(short, logoMap);
   return `
-    <div class="schedule-card__side" data-schedule-team-short="${shortSafe}">
+    <div class="schedule-card__side ${win ? 'schedule-card__side--win' : ''}" data-schedule-team-short="${shortSafe}">
       <img class="schedule-card__logo" src="${src}" alt="${name} logo" loading="lazy"
         onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2246%22 fill=%22%23182242%22 stroke=%22%23d4b47a%22 stroke-width=%222%22 stroke-dasharray=%226 6%22/><text x=%2250%22 y=%2264%22 font-size=%2240%22 font-weight=%22900%22 fill=%22%23d4b47a%22 text-anchor=%22middle%22 font-family=%22sans-serif%22>?</text></svg>'">
       <span class="schedule-card__name">${name}</span>
+      ${win ? '<i class="schedule-card__winbadge" aria-label="胜方">胜</i>' : ''}
     </div>
   `;
 }
@@ -1671,7 +1686,7 @@ function ensureMatchDetailsModal() {
   return mask;
 }
 
-function showMatchDetails(match, appointment) {
+export function showMatchDetails(match, appointment) {
   const mask = ensureMatchDetailsModal();
   const content = mask.querySelector('.match-details-content');
   const user = getCurrentUser();
@@ -1764,7 +1779,10 @@ function showMatchDetails(match, appointment) {
   }
 
   content.innerHTML = `
-    <h3 class="tool-modal__title" id="matchDetailsTitle">${sanitize(teamAName)} VS ${sanitize(teamBName)} <em>比赛详情</em></h3>
+    <h3 class="tool-modal__title" id="matchDetailsTitle">
+      ${sanitize(teamAName)} VS ${sanitize(teamBName)} <em>比赛详情</em>
+      <button class="btn btn--ghost btn--sm match-share-btn" id="matchShareBtn" type="button" style="margin-left:auto" aria-label="分享">📤 分享</button>
+    </h3>
     <div class="match-detail-status ${appointment?.is_finished ? 'match-detail-status--finished' : appointment ? 'match-detail-status--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</div>
     ${scoreHtml}
     <section class="match-detail-section" aria-label="比赛安排">
@@ -1782,6 +1800,16 @@ function showMatchDetails(match, appointment) {
   mask.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
 
+  /* 分享按钮 */
+  const shareBtn = content.querySelector('#matchShareBtn');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+      const idx = appointment ? appointment.match_index : (currentScheduleMatches.indexOf(match));
+      const url = buildMatchShareUrl(currentScheduleId, idx);
+      shareUrl(url, `${teamAName} VS ${teamBName}`, '查看比赛详情与首发名单');
+    });
+  }
+
   content.querySelectorAll('.match-signup-button').forEach(signupButton => signupButton.addEventListener('click', async () => {
     const signupRole = signupButton.dataset.signupRole;
     const isSigned = mySignups.some(s => s.role === signupRole);
@@ -1795,7 +1823,7 @@ function showMatchDetails(match, appointment) {
       mutationComplete = true;
       const roleLabel = signupRole === 'judge' ? '裁判' : '解说';
       showActionNotice(isSigned ? `已取消${roleLabel}报名` : `${roleLabel}报名成功`);
-      const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
+      const data = await store.loadAppointments(currentScheduleId);
       currentAppointments = data.appointments || [];
       renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments, currentTournament);
       const updated = currentAppointments.find(a => a.id === appointment.id);
@@ -1820,7 +1848,7 @@ function showMatchDetails(match, appointment) {
       });
       mutationComplete = true;
       showActionNotice('比赛已恢复为未完赛，比分已清空');
-      const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
+      const data = await store.loadAppointments(currentScheduleId);
       currentAppointments = data.appointments || [];
       renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments, currentTournament);
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
@@ -1885,7 +1913,7 @@ function showMatchDetails(match, appointment) {
       });
       mutationComplete = true;
       showActionNotice('比分已保存');
-      const data = await apiRequest(`/api/match-appointments?schedule_id=${currentScheduleId}`);
+      const data = await store.loadAppointments(currentScheduleId);
       currentAppointments = data.appointments || [];
       renderSchedule(currentScheduleMatches, document.getElementById('scheduleBoard'), currentScheduleTitle, currentScheduleLogoMap, currentScheduleNameMap, currentScheduleId, currentAppointments, currentTournament);
       showMatchDetails(match, currentAppointments.find(a => a.id === appointment.id));
@@ -2000,9 +2028,20 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
 
       const score = scoreText(appointment);
       const finished = !!appointment?.is_finished;
+      const decided = finished && appointment.score_a != null && appointment.score_b != null && appointment.score_a !== appointment.score_b;
+      const winA = decided && appointment.score_a > appointment.score_b;
+      const winB = decided && appointment.score_b > appointment.score_a;
       let centerMain;
       if (score) {
-        centerMain = `<div class="schedule-card__score">${score}</div>`;
+        if (decided) {
+          centerMain = `<div class="schedule-card__score">
+            <b class="${winA ? 'is-win' : ''}">${appointment.score_a}</b>
+            <span>:</span>
+            <b class="${winB ? 'is-win' : ''}">${appointment.score_b}</b>
+          </div>`;
+        } else {
+          centerMain = `<div class="schedule-card__score">${score}</div>`;
+        }
       } else if (finished) {
         centerMain = `<div class="schedule-card__score schedule-card__score--pending">比分待补录</div>`;
       } else {
@@ -2020,14 +2059,15 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
              data-team-search="${sanitize(`${p.a || ''} ${p.b || ''}`)}"
              ${collapsed ? 'hidden' : ''}
              aria-label="查看 ${sanitize(p.a || '轮空')} 对阵 ${sanitize(p.b || '轮空')} 详情">
-          ${scheduleSideHtml(p.a, logoMap, nameMap)}
+          <button class="schedule-card__share" data-match-share="${flatIndex}" type="button" aria-label="分享">📤</button>
+          ${scheduleSideHtml(p.a, logoMap, nameMap, winA)}
           <div class="schedule-card__center">
             <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
             ${centerMain}
             ${appointmentTime}
             ${appointmentStaff}
           </div>
-          ${scheduleSideHtml(p.b, logoMap, nameMap)}
+          ${scheduleSideHtml(p.b, logoMap, nameMap, winB)}
         </div>
       `;
     }).join('');
@@ -2078,6 +2118,19 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
 
     <p class="schedule-no-results" id="scheduleNoResults" hidden>没有符合条件的对阵，请调整搜索内容或比赛状态。</p>
   `;
+
+  /* 分享按钮 */
+  container.querySelectorAll('[data-match-share]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.matchShare);
+      const m = list[idx];
+      const url = buildMatchShareUrl(currentScheduleId, idx);
+      const aName = (currentScheduleNameMap && currentScheduleNameMap[m.a]) || m.a;
+      const bName = (currentScheduleNameMap && currentScheduleNameMap[m.b]) || m.b;
+      shareUrl(url, `${aName} VS ${bName}`, '查看比赛详情与首发名单');
+    });
+  });
 
   container.querySelectorAll('[data-match-index]').forEach(card => {
     const open = () => {
@@ -2161,13 +2214,252 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
   container.setAttribute('aria-busy', 'false');
 }
 
+export async function loadResults() {
+  const box = document.getElementById('resultsBoard');
+  if (!box) return;
+  box.innerHTML = '<div class="board__state">正在加载赛果…</div>';
+
+  try {
+    const data = await store.loadSchedule();
+    const s = data.schedule;
+    if (!s || !s.matches) {
+      box.innerHTML = '<div class="board__state">尚未发布赛程</div>';
+      return;
+    }
+
+    const tournament = parseTournament(s.matches);
+    const flatMatches = tournament ? tournament.allMatches : (Array.isArray(s.matches) ? s.matches : []);
+
+    const appointmentData = await store.loadAppointments(s.id).catch(() => ({ appointments: [] }));
+    const appointments = appointmentData.appointments || [];
+
+    const td = await fetchTeams().catch(() => ({ teams: [] }));
+    const nameMap = {};
+    (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+
+    renderResults(flatMatches, box, s.title || '赛程', nameMap, appointments);
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+  }
+}
+
+function renderResults(list, container, title, nameMap, appointments) {
+  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
+
+  const done = list
+    .map((m, i) => ({ match: m, flatIndex: i, appointment: appointmentByIndex.get(i) }))
+    .filter(item => item.appointment?.is_finished && item.appointment.score_a != null && item.appointment.score_b != null)
+    .sort((a, b) => (b.appointment.id || 0) - (a.appointment.id || 0));
+
+  if (!done.length) {
+    container.innerHTML = '<div class="board__state">暂无已完赛的赛果</div>';
+    return;
+  }
+
+  const items = done.map(({ match, flatIndex, appointment }) => {
+    const aName = nameMap[match.a] || match.a || '轮空';
+    const bName = nameMap[match.b] || match.b || '轮空';
+    const sa = appointment.score_a, sb = appointment.score_b;
+    const decided = sa !== sb;
+    const winA = decided && sa > sb;
+    const winB = decided && sb > sa;
+    const time = appointment.start_time ? formatMatchTime(appointment.start_time) : '';
+    const line = decided
+      ? `${aName} 以 ${sa}:${sb} 战胜 ${bName}`
+      : `${aName} 与 ${bName} 战成 ${sa}:${sb} 平手`;
+
+    return `
+      <div class="result-card" role="button" tabindex="0"
+           data-result-index="${flatIndex}" aria-label="查看 ${aName} 对阵 ${bName} 详情">
+        ${scheduleSideHtml(match.a, {}, nameMap, winA)}
+        <div class="result-card__center">
+          <div class="result-card__score">
+            <b class="${winA ? 'is-win' : ''}">${sa}</b><span>:</span><b class="${winB ? 'is-win' : ''}">${sb}</b>
+          </div>
+          <div class="result-card__line">${sanitize(line)}</div>
+          ${time ? `<div class="result-card__time">${sanitize(time)}</div>` : ''}
+        </div>
+        ${scheduleSideHtml(match.b, {}, nameMap, winB)}
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="results-head"><span class="results-head__title">${sanitize(title)}</span><span class="results-head__count">${done.length} 场已完赛</span></div>
+    <div class="results-list">${items}</div>
+  `;
+
+  container.querySelectorAll('[data-result-index]').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = Number(card.dataset.resultIndex);
+      showMatchDetails(list[idx], appointmentByIndex.get(idx));
+    });
+  });
+  container.setAttribute('aria-busy', 'false');
+}
+
+export async function loadHub() {
+  const box = document.getElementById('hubBoard');
+  if (!box) return;
+  box.innerHTML = '<div class="board__state">正在加载赛事中心…</div>';
+
+  try {
+    const data = await store.loadSchedule();
+    const s = data.schedule;
+    if (!s || !s.matches) {
+      box.innerHTML = '<div class="board__state">尚未发布赛程</div>';
+      return;
+    }
+
+    const tournament = parseTournament(s.matches);
+    const flatMatches = tournament ? tournament.allMatches : (Array.isArray(s.matches) ? s.matches : []);
+
+    const appointmentData = await store.loadAppointments(s.id).catch(() => ({ appointments: [] }));
+    const appointments = appointmentData.appointments || [];
+
+    const td = await fetchTeams().catch(() => ({ teams: [] }));
+    const nameMap = {};
+    (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+
+    const lb = await apiRequest('/api/guesses/leaderboard?schedule_id=' + s.id).catch(() => ({ leaderboard: [] }));
+
+    renderHub(flatMatches, box, s.title || '赛程', nameMap, appointments, lb.leaderboard || []);
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+  }
+}
+
+function renderHub(list, container, title, nameMap, appointments, leaderboard) {
+  const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
+  const board = (leaderboard || []).slice(0, 10);
+
+  const matchesHtml = list.map((m, i) => {
+    const appt = appointmentByIndex.get(i);
+    const aName = nameMap[m.a] || m.a || '轮空';
+    const bName = nameMap[m.b] || m.b || '轮空';
+    const finished = !!appt?.is_finished;
+    const sa = appt?.score_a, sb = appt?.score_b;
+    const decided = finished && sa != null && sb != null && sa !== sb;
+    const winA = decided && sa > sb, winB = decided && sb > sa;
+    const time = appt?.start_time ? formatMatchTime(appt.start_time) : '';
+    const stateTag = finished
+      ? '<span class="hub-match__state is-finished">已完赛</span>'
+      : appt ? '<span class="hub-match__state is-scheduled">已约赛</span>' : '<span class="hub-match__state">待约赛</span>';
+    return `
+      <div class="hub-match" role="button" tabindex="0" data-hub-index="${i}"
+           aria-label="查看 ${aName} 对阵 ${bName} 详情">
+        ${scheduleSideHtml(m.a, {}, nameMap, winA)}
+        <div class="hub-match__center">
+          ${stateTag}
+          <div class="hub-match__score">
+            ${decided
+              ? `<b class="${winA ? 'is-win' : ''}">${sa}</b><span>:</span><b class="${winB ? 'is-win' : ''}">${sb}</b>`
+              : '<span class="hub-match__vs">VS</span>'}
+          </div>
+          ${time ? `<div class="hub-match__time">${sanitize(time)}</div>` : ''}
+        </div>
+        ${scheduleSideHtml(m.b, {}, nameMap, winB)}
+      </div>
+    `;
+  }).join('');
+
+  const lbHtml = board.length
+    ? board.map((p, i) => `<li class="hub-lb__row"><b>#${i + 1}</b><span>${sanitize(p.username)}</span><em>猜中 ${p.correct}/${p.total}</em></li>`).join('')
+    : '<li class="hub-lb__empty">暂无竞猜积分</li>';
+
+  container.innerHTML = `
+    <div class="hub">
+      <div class="hub__head"><h3 class="hub__title">${sanitize(title)}</h3><span class="hub__count">${list.length} 场</span></div>
+      <section class="hub-block">
+        <div class="hub-block__head"><h4>🏆 竞猜积分榜</h4><span class="hub-block__note">猜中 / 参与场次</span></div>
+        <ul class="hub-lb">${lbHtml}</ul>
+      </section>
+      <section class="hub-block">
+        <div class="hub-block__head"><h4>对阵总览</h4></div>
+        <div class="hub-list">${matchesHtml}</div>
+      </section>
+    </div>
+  `;
+
+  container.querySelectorAll('[data-hub-index]').forEach(card => {
+    card.addEventListener('click', () => {
+      const idx = Number(card.dataset.hubIndex);
+      showMatchDetails(list[idx], appointmentByIndex.get(idx));
+    });
+  });
+  container.setAttribute('aria-busy', 'false');
+}
+
+export async function loadGuessBoard() {
+  const box = document.getElementById('boardBoard');
+  if (!box) return;
+  box.innerHTML = '<div class="board__state">正在加载竞猜榜…</div>';
+
+  try {
+    const data = await store.loadSchedule();
+    const s = data.schedule;
+    if (!s || !s.id) {
+      box.innerHTML = '<div class="board__state">尚未发布赛程</div>';
+      return;
+    }
+    const td = await fetchTeams().catch(() => ({ teams: [] }));
+    const nameMap = {};
+    (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+
+    const lb = await apiRequest('/api/guesses/leaderboard?schedule_id=' + s.id).catch(() => ({ leaderboard: [] }));
+    const cb = await apiRequest('/api/guesses/champion/leaderboard?schedule_id=' + s.id).catch(() => ({ leaderboard: [], settled: false, champion: null }));
+
+    renderGuessBoardPage(box, s.title || '赛程', lb.leaderboard || [], cb, nameMap);
+  } catch (err) {
+    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
+  }
+}
+
+function renderGuessBoardPage(box, title, board, cb, nameMap) {
+  const nm = (s) => nameMap[s] || s;
+
+  const matchRows = (board || []).length
+    ? board.map((p, i) => `
+        <li class="gb-row">
+          <b class="gb-row__rank">#${i + 1}</b>
+          <span class="gb-row__name">${sanitize(p.username)}</span>
+          <em class="gb-row__score">${p.correct} / ${p.total} 场</em>
+        </li>`).join('')
+    : '<li class="gb-empty">暂无竞猜记录</li>';
+
+  const champRows = (cb.leaderboard || []).length
+    ? cb.leaderboard.map((p, i) => `
+        <li class="gb-row">
+          <b class="gb-row__rank">#${i + 1}</b>
+          <span class="gb-row__name">${sanitize(p.username)}</span>
+          <span class="gb-row__pick">→ ${sanitize(nm(p.pick))}</span>
+          <em class="gb-row__score">${cb.settled ? (p.correct ? '✓ 猜中' : '✗') : '·'}</em>
+        </li>`).join('')
+    : '<li class="gb-empty">暂无冠军竞猜记录</li>';
+
+  box.innerHTML = `
+    <div class="gb">
+      <div class="gb__head"><h3 class="gb__title">${sanitize(title)}</h3><span class="gb__count">公开排行榜</span></div>
+      <section class="gb-block">
+        <div class="gb-block__head"><h4>场次竞猜积分</h4><span class="gb-block__note">按猜中数排序</span></div>
+        <ul class="gb-list">${matchRows}</ul>
+      </section>
+      <section class="gb-block">
+        <div class="gb-block__head"><h4>🏆 冠军竞猜</h4><span class="gb-block__note">${cb.settled ? `冠军：${sanitize(nm(cb.champion))}` : '冠军待定，赛后揭晓'}</span></div>
+        <ul class="gb-list">${champRows}</ul>
+      </section>
+    </div>
+  `;
+  box.setAttribute('aria-busy', 'false');
+}
+
 export async function loadSchedule() {
   const box = document.getElementById('scheduleBoard');
   if (!box) return;
   const loadSequence = ++scheduleLoadSequence;
 
   try {
-    const data = await apiRequest('/api/schedule');
+    const data = await store.loadSchedule();
     if (loadSequence !== scheduleLoadSequence || !box.isConnected) return;
     const s = data.schedule;
     if (!s || !s.matches) {
@@ -2180,7 +2472,7 @@ export async function loadSchedule() {
 
     renderSchedule(flatMatches, box, s.title, {}, {}, s.id, [], tournament);
 
-    const appointmentData = await apiRequest(`/api/match-appointments?schedule_id=${s.id}`).catch(() => ({ appointments: [] }));
+    const appointmentData = await store.loadAppointments(s.id).catch(() => ({ appointments: [] }));
     if (loadSequence !== scheduleLoadSequence || !box.isConnected) return;
     const appointments = appointmentData.appointments || [];
     renderSchedule(flatMatches, box, s.title, {}, {}, s.id, appointments, tournament);
