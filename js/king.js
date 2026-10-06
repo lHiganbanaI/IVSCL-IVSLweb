@@ -4,6 +4,26 @@
 
 const CHANGELOG = [
   {
+    date: '2026-10-06',
+    version: 'v1.7',
+    title: '内测竞猜与导播',
+    items: [
+      '新增「绝版内测」账号类型：激活码 xixizy，解锁竞猜 / 打 Call / 头像上传',
+      '赛事竞猜上线：场次预测 + 冠军竞猜，比完按比分结算积分，开赛前截止',
+      '新增公开「竞猜榜」：场次积分榜 + 冠军榜',
+      '打 Call 与账号头像上传（仅管理员 / 绝版内测）',
+      '导播台新增封面 / 解说席画面与拖拽定位编辑器，只显示已约赛未完赛，支持搜索',
+      '页面精简：去掉重复的「赛事中心」「赛果战报」，战报句并入赛程卡',
+      '网页功能页改为内嵌页面（不再弹窗），去掉与页面重复的工具卡',
+      '删除裁判「比赛房间」工具与后端接口',
+      '赛事竞猜新增「我的竞猜」个人战绩：参与 / 猜中 / 待结算 / 正确率',
+      '我的比赛优化：双首发展示升级 + 搜索与折叠，双边选手可同时出现在求生与监管首发',
+      '新增「我的」个人中心：我的信息 / 我的战队 / 我的比赛，可直接展示也可一键跳转',
+      '移除「我是皇帝」页，网站更新日志并入「我的」页面底部',
+      '后端面向对象重构 + 目录整理 + 一键备份 / 版本号脚本，线上部署完成'
+    ]
+  },
+  {
     date: '2026-10-04',
     version: 'v1.6',
     title: '首发与总览',
@@ -80,8 +100,8 @@ const CHANGELOG = [
   }
 ];
 
-export function renderKingTimeline() {
-  const box = document.getElementById('kingTimeline');
+export function renderKingTimeline(target = 'kingTimeline') {
+  const box = document.getElementById(target);
   if (!box) return;
 
   box.innerHTML = CHANGELOG.map((log, i) => `

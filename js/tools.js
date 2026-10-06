@@ -4,13 +4,13 @@
 
 import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
-} from './config.js?v=20261005-07';
+} from './config.js?v=20261006-17';
 import { apiRequest, getCurrentUser } from './api.js';
 import {
   sanitize, getInitialFromName,
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
-import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261005-07';
+import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-17';
 import {
   TOURNAMENT_TYPES,
   TOURNAMENT_TYPE_LABELS,
@@ -20,7 +20,7 @@ import {
   DoubleElimination,
   GroupStage
 } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-17';
 
 /* 双保险：把入口挂到 window */
 window.__openMyMatchesPage = window.__openMyMatchesPage || openMyMatchesPage;
@@ -153,278 +153,47 @@ export function renderToolsPanel() {
         window.open(tool.external, '_blank', 'noopener');
         return;
       }
-      if (id === 'teams') {
-        document.querySelector('.tab[data-tab="teams"]')?.click();
-        setTimeout(() => window.__showTeamsAdminView?.(), 300);
-        return;
-      }
       if (id === 'myMatches') {
         window.__openMyMatchesPage?.();
         return;
       }
-      if (id === 'goVote') {
-        document.querySelector('.tab[data-tab="teams"]')?.click();
-        return;
-      }
-      openToolModal(id);
+      openToolInline(id);
     });
   });
 }
 
 /* ============================================================
-   工具弹窗
+   工具内嵌工作区（点击工具卡后在此渲染，替代弹窗）
 ============================================================ */
-function initToolModalControl() {
-  const mask = document.getElementById('toolModal');
-  const closeB = document.getElementById('toolModalClose');
-  if (!mask) return;
+async function openToolInline(toolId) {
+  const contentBox = document.getElementById('toolsContent');
+  if (!contentBox) return;
 
-  let lastFocused = null;
-  function openModal() {
-    lastFocused = document.activeElement;
-    mask.classList.add('is-open');
-    mask.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    requestAnimationFrame(() => {
-      const f = mask.querySelector('input, select, textarea, button:not([disabled])');
-      if (f) f.focus();
-    });
-  }
-  function close() {
-    mask.classList.remove('is-open');
-    mask.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-    if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
-  }
-  closeB.addEventListener('click', close);
-  mask.addEventListener('click', e => { if (e.target === mask) close(); });
-  document.addEventListener('keydown', e => {
-    if (!mask.classList.contains('is-open')) return;
-    if (e.key === 'Escape') { e.preventDefault(); close(); }
-  });
-
-  window.__toolModal = { openModal, close };
-}
-
-async function openToolModal(toolId) {
-  const box = document.getElementById('toolModalContent');
-  if (!box) return;
-
-  const modalEl = document.querySelector('#toolModal .tool-modal');
-  if (modalEl) {
-    modalEl.classList.toggle('tool-modal--wide', toolId === 'matchesOverview');
-  }
-
-  if (toolId === 'matchesOverview') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadMatchesOverviewTool(box);
-  } else if (toolId === 'announcements') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadAnnouncementsTool(box);
-  } else if (toolId === 'draw') {
-    box.innerHTML = renderDrawTool();
-    window.__toolModal.openModal();
-    bindDrawEvents();
-    loadDrawResult();
-  } else if (toolId === 'rooms') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadRoomsTool(box);
-  } else if (toolId === 'schedule') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadScheduleTool(box);
-  } else if (toolId === 'bindSchool') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadBindSchoolTool(box);
-  } else if (toolId === 'matchBooking') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadMatchBookingTool(box);
-  } else if (toolId === 'guess') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadGuessTool(box);
-  } else if (toolId === 'adminHub') {
-    box.innerHTML = '<div class="board__state">加载中…</div>';
-    window.__toolModal.openModal();
-    await loadAdminHub(box);
-  }
-}
-
-/* ============================================================
-   管理员 · 比赛总览
-============================================================ */
-async function loadMatchesOverviewTool(box) {
-  let data;
-  try {
-    data = await apiRequest('/api/admin/matches-overview');
-  } catch (err) {
-    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
-    return;
-  }
-
-  if (!data || !data.schedule) {
-    box.innerHTML = `
-      <h3 class="tool-modal__title">比赛总览 <em>ADMIN</em></h3>
-      <div class="tool-modal__info">当前没有已发布的赛程。</div>
-    `;
-    return;
-  }
-
-  const schedule = data.schedule;
-  const matches = data.matches || [];
-
-  box.innerHTML = `
-    <h3 class="tool-modal__title">比赛总览 <em>ADMIN</em></h3>
-    <p class="tool-modal__sub">
-      ${sanitize(schedule.title || '赛程')} ·
-      <b>${schedule.total_matches}</b> 场比赛 ·
-      合并展示<b>约赛时间 / 比分 / 首发名单</b>
-    </p>
-
-    <div class="overview-toolbar">
-      <input type="search" id="ovSearch" placeholder="搜索队伍名称或简称" autocomplete="off">
-      <select id="ovFilter">
-        <option value="all">全部比赛</option>
-        <option value="booked">已约赛</option>
-        <option value="finished">已完赛</option>
-        <option value="unbooked">未约赛</option>
-        <option value="lineup-missing">首发未齐</option>
-      </select>
-      <span class="overview-toolbar__count" id="ovCount"></span>
+  contentBox.innerHTML = `
+    <div class="tools-workspace">
+      <div class="tools-workspace__bar">
+        <button class="btn btn--ghost btn--sm tools-workspace__back" id="toolsBack" type="button">← 返回工具列表</button>
+      </div>
+      <div id="toolsWorkspaceBox" class="tools-workspace__box">
+        <div class="board__state">加载中…</div>
+      </div>
     </div>
-
-    <div class="overview-list" id="ovList"></div>
   `;
+  const box = document.getElementById('toolsWorkspaceBox');
+  const back = document.getElementById('toolsBack');
+  if (back) back.addEventListener('click', () => renderToolsPanel());
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  const list = box.querySelector('#ovList');
-  const search = box.querySelector('#ovSearch');
-  const filter = box.querySelector('#ovFilter');
-  const countEl = box.querySelector('#ovCount');
-
-  const renderCard = (m) => {
-    const appt = m.appointment;
-    const timeStr = appt && appt.start_time ? formatBeijing(appt.start_time) : '未约赛';
-    const hasScore = !!(appt && appt.is_finished && appt.score_a != null && appt.score_b != null);
-    const scoreStr = hasScore ? `${appt.score_a} : ${appt.score_b}` : '—';
-
-    const statusText = appt
-      ? (appt.is_finished ? '已完赛' : '已约赛')
-      : '未约赛';
-    const statusClass = appt
-      ? (appt.is_finished ? 'is-finished' : 'is-booked')
-      : 'is-unbooked';
-
-    const lineupStatus = (ln) => ln ? '<span class="ov-lineup__status is-done">✓ 已提交</span>' : '<span class="ov-lineup__status is-pending">⚠ 未提交</span>';
-    const playerLine = (p) => `${sanitize(p.name || '—')}${p.cn_short ? `（${sanitize(p.cn_short)}）` : ''}<em>${sanitize(p.uid || '')}</em>`;
-
-    const renderLineup = (ln) => {
-      if (!ln) {
-        return `
-          <div class="ov-lineup__empty">该校未提交首发名单</div>
-        `;
-      }
-      return `
-        <div class="ov-lineup__group">
-          <span class="ov-lineup__group-title">求生者</span>
-          <ul class="ov-lineup__players">
-            ${(ln.survivors || []).map(p => `<li>${playerLine(p)}</li>`).join('') || '<li class="ov-lineup__none">—</li>'}
-          </ul>
-        </div>
-        <div class="ov-lineup__group">
-          <span class="ov-lineup__group-title">监管者</span>
-          <ul class="ov-lineup__players">
-            ${ln.hunter ? `<li>${playerLine(ln.hunter)}</li>` : '<li class="ov-lineup__none">—</li>'}
-          </ul>
-        </div>
-        <div class="ov-lineup__meta">
-          ${ln.updated_at ? `提交于 ${sanitize(formatBeijing(ln.updated_at))}` : ''}
-          ${ln.submitted_by_name ? ` · 由 ${sanitize(ln.submitted_by_name)}` : ''}
-        </div>
-      `;
-    };
-
-    return `
-      <article class="ov-match" data-search="${sanitize(`${m.team_a_name} ${m.team_a} ${m.team_b_name} ${m.team_b}`)}"
-               data-status="${appt ? (appt.is_finished ? 'finished' : 'booked') : 'unbooked'}"
-               data-lineup="${m.lineup_a && m.lineup_b ? 'full' : 'missing'}">
-        <div class="ov-match__head">
-          <span class="ov-match__round">
-            ${m.round_index ? `第 ${m.round_index} 轮` : '赛程'}
-            ${m.round_name ? ` · ${sanitize(m.round_name)}` : ''}
-          </span>
-          <span class="ov-match__status ${statusClass}">${statusText}</span>
-          <span class="ov-match__index">#${m.match_index + 1}</span>
-        </div>
-
-        <div class="ov-match__vs">
-          <div class="ov-match__team">
-            ${m.team_a_logo ? `<img src="${m.team_a_logo}" alt="${sanitize(m.team_a_name)}">` : '<span class="ov-match__team-ph">?</span>'}
-            <span class="ov-match__team-name">${sanitize(m.team_a_name)}</span>
-          </div>
-          <div class="ov-match__center">
-            <div class="ov-match__score">${scoreStr}</div>
-            <div class="ov-match__time">📅 ${sanitize(timeStr)}</div>
-          </div>
-          <div class="ov-match__team">
-            ${m.team_b_logo ? `<img src="${m.team_b_logo}" alt="${sanitize(m.team_b_name)}">` : '<span class="ov-match__team-ph">?</span>'}
-            <span class="ov-match__team-name">${sanitize(m.team_b_name)}</span>
-          </div>
-        </div>
-
-        <div class="ov-lineups">
-          <div class="ov-lineup">
-            <div class="ov-lineup__head">
-              <b>${sanitize(m.team_a_name)}</b>
-              ${lineupStatus(m.lineup_a)}
-            </div>
-            ${renderLineup(m.lineup_a)}
-          </div>
-          <div class="ov-lineup">
-            <div class="ov-lineup__head">
-              <b>${sanitize(m.team_b_name)}</b>
-              ${lineupStatus(m.lineup_b)}
-            </div>
-            ${renderLineup(m.lineup_b)}
-          </div>
-        </div>
-      </article>
-    `;
-  };
-
-  const update = () => {
-    const q = (search.value || '').trim().toLowerCase();
-    const f = filter.value;
-    const cards = [...list.querySelectorAll('.ov-match')];
-    let visible = 0;
-    cards.forEach(card => {
-      const text = card.dataset.search.toLowerCase();
-      const status = card.dataset.status;
-      const lineup = card.dataset.lineup;
-
-      let matchFilter = true;
-      if (f === 'booked') matchFilter = status === 'booked';
-      else if (f === 'finished') matchFilter = status === 'finished';
-      else if (f === 'unbooked') matchFilter = status === 'unbooked';
-      else if (f === 'lineup-missing') matchFilter = lineup === 'missing';
-
-      const matchSearch = !q || text.includes(q);
-      const show = matchFilter && matchSearch;
-      card.hidden = !show;
-      if (show) visible++;
-    });
-    countEl.textContent = `显示 ${visible} / ${cards.length} 场`;
-  };
-
-  list.innerHTML = matches.map(renderCard).join('') || '<div class="board__state">暂无比赛</div>';
-  search.addEventListener('input', update);
-  filter.addEventListener('change', update);
-  update();
+  if (toolId === 'announcements') await loadAnnouncementsTool(box);
+  else if (toolId === 'draw') { box.innerHTML = renderDrawTool(); bindDrawEvents(); loadDrawResult(); }
+  else if (toolId === 'schedule') await loadScheduleTool(box);
+  else if (toolId === 'bindSchool') await loadBindSchoolTool(box);
+  else if (toolId === 'matchBooking') await loadMatchBookingTool(box);
+  else if (toolId === 'guess') await loadGuessTool(box);
+  else if (toolId === 'adminHub') await loadAdminHub(box);
+  else box.innerHTML = '<div class="tool-modal__info">该工具暂不可用。</div>';
 }
+
 
 /* ============================================================
    公告栏管理
@@ -672,267 +441,6 @@ function bindDrawEvents() {
   });
 }
 
-/* ============================================================
-   比赛房间
-============================================================ */
-async function loadRoomsTool(box) {
-  let list = [];
-  try {
-    const data = await apiRequest('/api/rooms');
-    list = data.rooms || [];
-  } catch (err) {
-    box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
-    return;
-  }
-
-  let teams = [], nameMap = {};
-  try {
-    const td = await fetchTeams();
-    teams = td.teams || [];
-    teams.forEach(t => { nameMap[t.short] = t.name; });
-  } catch (e) {}
-  const teamOpts = teams.map(t => `<option value="${sanitize(t.short)}">${sanitize(t.name)}（${sanitize(t.short)}）</option>`).join('');
-
-  let matches = [];
-  try {
-    const sd = await apiRequest('/api/schedule');
-    const tn = sd.schedule ? parseTournament(sd.schedule.matches) : null;
-    matches = tn ? tn.allMatches : [];
-  } catch (e) {}
-
-  const matchOpts = matches.map((m, i) => {
-    const aName = nameMap[m.a] || m.a || '轮空';
-    const bName = nameMap[m.b] || m.b || '轮空';
-    return `<option value="${i}">第 ${i + 1} 场：${sanitize(aName)} VS ${sanitize(bName)}</option>`;
-  }).join('');
-
-  box.innerHTML = `
-    <h3 class="tool-modal__title">比赛房间 <em>STAFF</em></h3>
-    <p class="tool-modal__sub">创建比赛房间号与密码，填写比赛时间、对战双方与主客场，可查看双方选手名单。管理员与裁判均可操作。</p>
-
-    ${matches.length ? `
-    <section class="tool-modal__section">
-      <div class="tool-modal__section-head"><h4>从赛程选择对阵</h4></div>
-      <div class="tool-form">
-        <div class="tool-field">
-          <label for="roomMatchPick">选择已发布的赛程对阵（自动填充对战双方与场次说明）</label>
-          <select id="roomMatchPick">
-            <option value="">-- 手动选择队伍 --</option>
-            ${matchOpts}
-          </select>
-        </div>
-      </div>
-    </section>
-    ` : ''}
-
-    <section class="tool-modal__section">
-      <div class="tool-modal__section-head"><h4>新建房间</h4></div>
-      <div class="tool-form">
-        <div class="tool-form__row">
-          <div class="tool-field">
-            <label for="roomCode">房间号</label>
-            <input type="text" id="roomCode" placeholder="例如：123456" maxlength="20">
-          </div>
-          <div class="tool-field">
-            <label for="roomPassword">密码</label>
-            <input type="text" id="roomPassword" placeholder="例如：8888" maxlength="20">
-          </div>
-        </div>
-        <div class="tool-field">
-          <label for="roomStart">比赛开始时间</label>
-          <input type="datetime-local" id="roomStart">
-        </div>
-        <div class="tool-form__row">
-          <div class="tool-field">
-            <label for="roomTeamA">对战队伍 A</label>
-            <select id="roomTeamA"><option value="">-- 选择队伍 --</option>${teamOpts}</select>
-          </div>
-          <div class="tool-field">
-            <label for="roomTeamB">对战队伍 B</label>
-            <select id="roomTeamB"><option value="">-- 选择队伍 --</option>${teamOpts}</select>
-          </div>
-          <div class="tool-field">
-            <label for="roomHome">主客场</label>
-            <select id="roomHome"><option value="A">A 主场</option><option value="B">B 主场</option><option value="N">中立场地</option></select>
-          </div>
-        </div>
-        <div class="tool-field">
-          <label for="roomTitle">场次说明</label>
-          <input type="text" id="roomTitle" placeholder="例如：小组赛 A 组第一场" maxlength="40">
-        </div>
-      </div>
-      <div class="tool-actions">
-        <button class="btn btn--primary btn--sm" id="roomAddBtn" type="button">+ 创建房间</button>
-      </div>
-    </section>
-
-    <section class="tool-modal__section">
-      <div class="tool-modal__section-head">
-        <h4>房间列表</h4>
-        <span class="tool-modal__count" id="roomCount">${list.length} 个</span>
-      </div>
-      <ul class="room-list" id="roomList"></ul>
-    </section>
-  `;
-
-  renderRoomListBox(list, nameMap);
-
-  const matchPick = document.getElementById('roomMatchPick');
-  if (matchPick) {
-    matchPick.addEventListener('change', () => {
-      const idx = matchPick.value;
-      if (idx === '') return;
-      const m = matches[Number(idx)];
-      if (!m) return;
-
-      const aSel = document.getElementById('roomTeamA');
-      const bSel = document.getElementById('roomTeamB');
-      if (aSel) aSel.value = m.a || '';
-      if (bSel) bSel.value = m.b || '';
-
-      const titleInput = document.getElementById('roomTitle');
-      if (titleInput && !titleInput.value.trim()) {
-        const aName = nameMap[m.a] || m.a || '轮空';
-        const bName = nameMap[m.b] || m.b || '轮空';
-        titleInput.value = `第 ${Number(idx) + 1} 场 · ${aName} VS ${bName}`;
-      }
-    });
-  }
-
-  document.getElementById('roomAddBtn').addEventListener('click', async () => {
-    const code = (document.getElementById('roomCode').value || '').trim();
-    const password = (document.getElementById('roomPassword').value || '').trim();
-    const title = (document.getElementById('roomTitle').value || '').trim();
-    const start_time = beijingISOFromLocal(document.getElementById('roomStart').value || '');
-    const team_a = (document.getElementById('roomTeamA').value || '').trim();
-    const team_b = (document.getElementById('roomTeamB').value || '').trim();
-    const home = (document.getElementById('roomHome').value || 'A');
-    if (!code) { alert('房间号不能为空'); return; }
-
-    const btn = document.getElementById('roomAddBtn');
-    const originalText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = '创建中…';
-
-    try {
-      await apiRequest('/api/rooms', {
-        method: 'POST',
-        body: JSON.stringify({ code, password, title, start_time, team_a, team_b, home })
-      });
-      document.getElementById('roomCode').value = '';
-      document.getElementById('roomPassword').value = '';
-      document.getElementById('roomTitle').value = '';
-      document.getElementById('roomStart').value = '';
-      document.getElementById('roomTeamA').value = '';
-      document.getElementById('roomTeamB').value = '';
-      const data = await apiRequest('/api/rooms');
-      renderRoomListBox(data.rooms || [], nameMap);
-    } catch (err) {
-      alert('创建失败：' + err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }
-  });
-}
-
-function renderRoomListBox(list, nameMap) {
-  nameMap = nameMap || {};
-  const box = document.getElementById('roomList');
-  const cnt = document.getElementById('roomCount');
-  if (!box) return;
-
-  if (!list.length) {
-    box.innerHTML = '<li class="tool-list__empty">暂无房间</li>';
-  } else {
-    const fullName = (short) => nameMap[short] ? nameMap[short] + '（' + short + '）' : (short || '—');
-    const fmtTime = (t) => {
-      if (!t) return '';
-      const s = formatBeijing(t);
-      return s ? s.slice(5) : String(t);
-    };
-    const homeText = (r) => {
-      if (!r.team_a || !r.team_b) return '';
-      if (r.home === 'B') return fullName(r.team_b) + ' 主场';
-      if (r.home === 'N') return '中立场地';
-      return fullName(r.team_a) + ' 主场';
-    };
-    box.innerHTML = list.map(r => {
-      const hasMatch = r.team_a && r.team_b;
-      const timeStr = fmtTime(r.created_at);
-      return `
-        <li class="room-card">
-          <div class="room-card__code">
-            <em>房号</em>
-            <b>${sanitize(r.code)}</b>
-          </div>
-          <div class="room-card__body">
-            <div class="room-card__title">${sanitize(r.title || '未命名场次')}</div>
-            <div class="room-card__meta">
-              <span>密码 <b>${sanitize(r.password || '—')}</b></span>
-              <span>创建者 <b>${sanitize(r.creator || '—')}</b></span>
-              <span>${sanitize(timeStr)}</span>
-            </div>
-            ${hasMatch ? `
-            <div class="room-card__match">
-              <span class="room-card__start">开始 <b>${sanitize(fmtTime(r.start_time) || '待定')}</b></span>
-              <span class="room-card__vs"><b>${sanitize(fullName(r.team_a))}</b><em>VS</em><b>${sanitize(fullName(r.team_b))}</b><i class="room-card__home">${sanitize(homeText(r))}</i></span>
-            </div>` : ''}
-          </div>
-          <div class="room-card__actions">
-            ${hasMatch ? `<button class="room-card__view" data-room-view="${r.id}">查看双方名单</button>` : ''}
-            <button class="room-card__remove" data-room-remove="${r.id}" aria-label="删除">✕</button>
-          </div>
-          <div class="room-card__roster" id="roster-${r.id}" hidden></div>
-        </li>
-      `;
-    }).join('');
-  }
-  if (cnt) cnt.textContent = list.length + ' 个';
-
-  box.querySelectorAll('[data-room-remove]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.roomRemove;
-      if (!confirm('确定要删除这个房间吗？')) return;
-      try {
-        await apiRequest('/api/rooms/' + id, { method: 'DELETE' });
-        const data = await apiRequest('/api/rooms');
-        renderRoomListBox(data.rooms || [], nameMap);
-      } catch (err) {
-        alert('删除失败：' + err.message);
-      }
-    });
-  });
-
-  box.querySelectorAll('[data-room-view]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.roomView;
-      const rosterEl = document.getElementById('roster-' + id);
-      if (!rosterEl) return;
-      const room = (list || []).find(r => String(r.id) === String(id));
-      if (!room) return;
-      if (!rosterEl.hidden) { rosterEl.hidden = true; btn.textContent = '查看双方名单'; return; }
-      rosterEl.hidden = false;
-      btn.textContent = '收起名单';
-      rosterEl.innerHTML = '<div class="board__state">加载名单中…</div>';
-      try {
-        const [da, db] = await Promise.all([
-          apiRequest('/api/team/players?school=' + encodeURIComponent(room.team_a)),
-          apiRequest('/api/team/players?school=' + encodeURIComponent(room.team_b))
-        ]);
-        const fullA = nameMap[room.team_a] || room.team_a;
-        const fullB = nameMap[room.team_b] || room.team_b;
-        rosterEl.innerHTML =
-          '<div class="room-roster__cols">' +
-            '<div class="room-roster__col"><div class="room-roster__title">' + sanitize(fullA) + '（A 队）</div>' + renderPlayersList(da.players || [], room.team_a) + '</div>' +
-            '<div class="room-roster__col"><div class="room-roster__title">' + sanitize(fullB) + '（B 队）</div>' + renderPlayersList(db.players || [], room.team_b) + '</div>' +
-          '</div>';
-      } catch (err) {
-        rosterEl.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
-      }
-    });
-  });
-}
 
 /* ============================================================
    添加赛程
@@ -1533,6 +1041,10 @@ async function loadGuessTool(box) {
     <h3 class="tool-modal__title">赛事竞猜 <em>BETA</em></h3>
     <p class="tool-modal__sub">${sanitize(schedule.title || '当前赛程')} · 对已约赛的每场比赛预测胜方，比完按比分自动结算；另可预测本届冠军。</p>
     <section class="tool-modal__section">
+      <div class="tool-modal__section-head"><h4>我的竞猜</h4><span class="tool-modal__count">个人战绩</span></div>
+      <div id="myGuessBox">加载中…</div>
+    </section>
+    <section class="tool-modal__section">
       <div class="tool-modal__section-head"><h4>🏆 冠军竞猜</h4><span class="tool-modal__count">预测本届冠军</span></div>
       <div id="champBlock">加载中…</div>
     </section>
@@ -1546,9 +1058,56 @@ async function loadGuessTool(box) {
     </section>
   `;
 
+  renderMyGuess(box, mine.matches || [], nameMap);
   renderChampionBlock(box, champ, nameMap, schedule.id);
   renderGuessList(box, mine.matches || [], nameMap, schedule.id);
   renderGuessBoard(box, lb.leaderboard || []);
+}
+
+function renderMyGuess(box, matches, nameMap) {
+  const el = box.querySelector('#myGuessBox');
+  if (!el) return;
+  const nm = (s) => nameMap[s] || s || '轮空';
+  const mine = matches.filter(m => m.pick);
+  const settled = mine.filter(m => m.is_finished);
+  const correct = settled.filter(m => m.correct).length;
+  const pending = mine.length - settled.length;
+  const rate = settled.length ? Math.round((correct / settled.length) * 100) : null;
+
+  if (!mine.length) {
+    el.innerHTML = `
+      <div class="guess-stats">
+        <div class="guess-stats__item"><b>0</b><span>已参与</span></div>
+        <div class="guess-stats__item"><b>0</b><span>猜中</span></div>
+        <div class="guess-stats__item"><b>—</b><span>正确率</span></div>
+      </div>
+      <p class="tool-modal__info">你还没有提交竞猜，去下方「对阵预测」选一场吧。</p>
+    `;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="guess-stats">
+      <div class="guess-stats__item"><b>${mine.length}</b><span>已参与</span></div>
+      <div class="guess-stats__item is-hit"><b>${correct}</b><span>猜中</span></div>
+      <div class="guess-stats__item"><b>${pending}</b><span>待结算</span></div>
+      <div class="guess-stats__item"><b>${rate === null ? '—' : rate + '%'}</b><span>正确率</span></div>
+    </div>
+    <ul class="my-guess">
+      ${mine.map(m => `
+        <li class="my-guess__row">
+          <div class="my-guess__match">第 ${m.match_index + 1} 场</div>
+          <div class="my-guess__vs">${sanitize(nm(m.team_a))} <em>VS</em> ${sanitize(nm(m.team_b))}</div>
+          <div class="my-guess__pick">我选 <b>${sanitize(nm(m.pick))}</b></div>
+          <div class="my-guess__status">
+            ${m.is_finished
+              ? (m.correct ? '<span class="guess-status is-correct">✓ 猜中</span>' : '<span class="guess-status is-wrong">✗ 未中</span>')
+              : '<span class="guess-status is-pending">待结算</span>'}
+          </div>
+        </li>
+      `).join('')}
+    </ul>
+  `;
 }
 
 function renderChampionBlock(box, champ, nameMap, scheduleId) {
@@ -1735,7 +1294,7 @@ async function loadAdminHub(box) {
   const gt = box.querySelector('#admGoTeams');
   if (gt) gt.addEventListener('click', () => {
     document.querySelector('.tab[data-tab="teams"]')?.click();
-    window.__toolModal.close?.();
+
   });
 }
 
@@ -1760,5 +1319,5 @@ function renderGuessBoard(box, board) {
    初始化
 ============================================================ */
 export function initTools() {
-  initToolModalControl();
+  // 工具已改为内嵌渲染（openToolInline），无需初始化弹窗
 }

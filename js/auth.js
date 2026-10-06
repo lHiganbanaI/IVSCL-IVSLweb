@@ -2,7 +2,7 @@
    账号系统：登录、注册、登出、按钮渲染
 ============================================================ */
 
-import { ROLE_LABELS } from './config.js?v=20261005-07';
+import { ROLE_LABELS } from './config.js?v=20261006-17';
 import { apiRequest, getCurrentUser, setToken } from './api.js';
 import { showError, hideError, getInitialFromName } from './utils.js';
 
@@ -30,9 +30,13 @@ export function renderAccountButton() {
     roleEl.textContent = ROLE_LABELS[u.role] || u.role;
     roleEl.dataset.role = u.role;
     roleEl.hidden = false;
+    const cached = getCachedAvatar();
+    if (cached) iconEl.innerHTML = `<img class="account-btn__avatar" src="${cached}" alt="${u.username || ''}">`;
+    else iconEl.textContent = '👤';
   } else {
     textEl.textContent = '登录 / 注册';
     roleEl.hidden = true;
+    iconEl.textContent = '👤';
   }
 }
 
@@ -258,6 +262,7 @@ function initAvatarUpload() {
       }
       await apiRequest('/api/user/avatar', { method: 'PUT', body: JSON.stringify({ avatar: dataUrl }) });
       setCachedAvatar(dataUrl);
+      renderAccountButton();
       renderAccountModal();
       window.app?.showActionNotice?.('头像已更新');
     } catch (err) {

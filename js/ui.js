@@ -4,7 +4,7 @@
 ============================================================ */
 import { TabTransition } from './transitions.js';
 
-export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'hub', 'results', 'board', 'tools', 'king'];
+export const VALID_TABS = ['home', 'about', 'teams', 'schedule', 'board', 'tools', 'mine'];
 
 /* 转场实例（由 initUI 创建）与切换回调 */
 let nav = null;

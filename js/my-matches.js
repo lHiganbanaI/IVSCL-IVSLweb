@@ -215,6 +215,7 @@ async function renderMyMatches() {
       <div class="my-matches-summary">
         共 <b>${related.length}</b> 场相关比赛 · 已提交首发 <b>${submittedCount}</b> 场
       </div>
+      <input type="search" id="myMatchesSearch" class="my-matches-search" placeholder="搜索队伍 / 对手 / 轮次…" autocomplete="off">
       <div class="my-matches-list">
         ${related.map(item => renderTeamCard(item, mySchool, teamNames, playersMap[mySchool] || [], lineupMap.get(`${item.index}-${mySchool}`))).join('')}
       </div>
@@ -228,6 +229,7 @@ async function renderMyMatches() {
       <div class="my-matches-summary">
         ${titleHint} · ${roleHint}视角
       </div>
+      <input type="search" id="myMatchesSearch" class="my-matches-search" placeholder="搜索队伍 / 对手 / 轮次…" autocomplete="off">
       <div class="my-matches-list">
         ${related.map(item => renderViewCard(item, teamNames, playersMap, lineupMap)).join('')}
       </div>
@@ -235,6 +237,31 @@ async function renderMyMatches() {
   }
 
   document.getElementById('myMatchesBackBtn')?.addEventListener('click', closeMyMatchesPage, { once: true });
+  bindMyMatchesExtras(content);
+}
+
+/* ============================================================
+   搜索 + 折叠
+============================================================ */
+function bindMyMatchesExtras(content) {
+  /* 搜索：按卡片文本过滤 */
+  const search = content.querySelector('#myMatchesSearch');
+  if (search) {
+    search.addEventListener('input', () => {
+      const kw = search.value.trim().toLowerCase();
+      content.querySelectorAll('.my-match-card').forEach(card => {
+        card.style.display = (!kw || card.textContent.toLowerCase().includes(kw)) ? '' : 'none';
+      });
+    });
+  }
+  /* 折叠：切换首发区显示 */
+  content.querySelectorAll('.my-match-card__toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.my-match-card');
+      card.classList.toggle('is-collapsed');
+      btn.textContent = card.classList.contains('is-collapsed') ? '▸' : '▾';
+    });
+  });
 }
 
 function emptyHint(role) {
@@ -267,6 +294,9 @@ function renderTeamCard(item, mySchool, teamNames, players, lineup) {
 
   const survivors = players.filter(p => p.position === '求生' || p.position === '双边');
   const hunters = players.filter(p => p.position === '监管' || p.position === '双边');
+  /* 位置映射（用于提交时判断"双边"选手能否同时占两个位置） */
+  const posMap = {};
+  players.forEach(p => { posMap[p.id] = p.position; });
 
   const survivorOpts = (selectedId) => `
     <option value="">-- 选择 --</option>
@@ -274,7 +304,7 @@ function renderTeamCard(item, mySchool, teamNames, players, lineup) {
   `;
   const hunterOpts = (selectedId) => `
     <option value="">-- 选择 --</option>
-    ${hunters.map(p => `<option value="${p.id}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${sanitize(p.name)}${p.cn_short ? '（' + sanitize(p.cn_short) + '）' : ''}</option>`).join('')}
+    ${hunters.map(p => `<option value="${p.id}" data-position="${sanitize(p.position)}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${sanitize(p.name)}${p.cn_short ? '（' + sanitize(p.cn_short) + '）' : ''}</option>`).join('')}
   `;
 
   const timeStr = item.appointment?.start_time ? formatBeijing(item.appointment.start_time) : '待定';
@@ -282,10 +312,11 @@ function renderTeamCard(item, mySchool, teamNames, players, lineup) {
   const roundLabel = item.roundIndex ? `第 ${item.roundIndex} 轮 · ${item.roundName}` : '';
 
   return `
-    <article class="my-match-card" data-match-index="${item.index}">
+    <article class="my-match-card" data-match-index="${item.index}" data-player-pos='${JSON.stringify(posMap)}'>
       <div class="my-match-card__head">
         <span class="my-match-card__round">${sanitize(roundLabel)}</span>
         <span class="my-match-card__status ${item.appointment?.is_finished ? 'is-finished' : item.appointment ? 'is-scheduled' : ''}">${status} · ${sanitize(timeStr)}</span>
+        <button class="my-match-card__toggle" type="button" aria-label="折叠 / 展开">▾</button>
       </div>
       <div class="my-match-card__vs">
         <span class="my-match-card__team ${mySide === 'a' ? 'is-mine' : ''}">${sanitize(aName)}</span>
@@ -353,19 +384,34 @@ function renderViewCard(item, teamNames, playersMap, lineupMap) {
   const lineupB = lineupMap.get(`${item.index}-${item.match.b}`);
 
   const formatLineup = (lineup, school) => {
-    if (!lineup) return '<span class="lineup-view__pending">⚠ 未提交</span>';
+    const players = playersMap[school] || [];
+    const nameMap = new Map(players.map(p => [p.id, p]));
+    if (!lineup) {
+      /* 未提交：渲染对称空槽，视觉更整齐 */
+      return `
+        <div class="lineup-view__meta is-pending">未提交</div>
+        <div class="lineup-view__group">
+          <div class="lineup-view__group-label">求生者 × 4</div>
+          <div class="lineup-view__slots">${'<span class="lineup-view__slot is-empty">—</span>'.repeat(4)}</div>
+        </div>
+        <div class="lineup-view__row"><span>监管者</span><b class="is-empty">—</b></div>
+      `;
+    }
     try {
       const s = JSON.parse(lineup.starters);
-      const players = playersMap[school] || [];
-      const nameMap = new Map(players.map(p => [p.id, p]));
-      const survivors = (s.survivors || []).map(id => {
+      const survivorList = (s.survivors || []).map(id => {
         const p = nameMap.get(Number(id));
-        return p ? sanitize(p.name) + (p.cn_short ? `（${sanitize(p.cn_short)}）` : '') : '未知';
+        return `<span class="lineup-view__slot">${p ? sanitize(p.name) + (p.cn_short ? `（${sanitize(p.cn_short)}）` : '') : '未知'}</span>`;
       });
       const hunter = nameMap.get(Number(s.hunter));
       const hunterStr = hunter ? sanitize(hunter.name) + (hunter.cn_short ? `（${sanitize(hunter.cn_short)}）` : '') : '未知';
+      const subAt = lineup.updated_at ? ' · ' + formatBeijing(lineup.updated_at) : '';
       return `
-        <div class="lineup-view__row"><span>求生者</span><b>${survivors.join('、') || '—'}</b></div>
+        <div class="lineup-view__meta is-done">已提交${sanitize(subAt)}</div>
+        <div class="lineup-view__group">
+          <div class="lineup-view__group-label">求生者 × 4</div>
+          <div class="lineup-view__slots">${survivorList.join('') || '<span class="lineup-view__slot is-empty">—</span>'}</div>
+        </div>
         <div class="lineup-view__row"><span>监管者</span><b>${hunterStr}</b></div>
       `;
     } catch { return '<span class="lineup-view__pending">⚠ 数据异常</span>'; }
@@ -376,6 +422,7 @@ function renderViewCard(item, teamNames, playersMap, lineupMap) {
       <div class="my-match-card__head">
         <span class="my-match-card__round">${sanitize(roundLabel)}</span>
         <span class="my-match-card__status ${item.appointment?.is_finished ? 'is-finished' : item.appointment ? 'is-scheduled' : ''}">${status} · ${sanitize(timeStr)}</span>
+        <button class="my-match-card__toggle" type="button" aria-label="折叠 / 展开">▾</button>
       </div>
       <div class="my-match-card__vs">
         <span class="my-match-card__team">${sanitize(aName)}</span>
@@ -434,8 +481,9 @@ function bindTeamSubmit(content, scheduleId) {
 
       /* 监管者与求生者重复 → 仅当该选手是「双边」时允许 */
       if (survivorIds.includes(hunterId)) {
-        const dupPlayer = players.find(p => Number(p.id) === hunterId);
-        if (!dupPlayer || dupPlayer.position !== '双边') {
+        let posMap = {};
+        try { posMap = JSON.parse(card.dataset.playerPos || '{}'); } catch (e) {}
+        if (posMap[hunterId] !== '双边') {
           showActionNotice('监管者不能与求生者重复（仅「双边」选手可同时占据两个位置）', true);
           if (msg) msg.textContent = '仅「双边」选手可同时出现在求生和监管位';
           return;

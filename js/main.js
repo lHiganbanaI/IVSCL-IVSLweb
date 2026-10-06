@@ -2,17 +2,17 @@
    入口文件：初始化所有模块，注册跨模块回调
 ============================================================ */
 
-import { initUI, setTabChangeCallback } from './ui.js';
+import { initUI, setTabChangeCallback } from './ui.js?v=20261006-17';
 import {
   initContent,
   loadAnnouncements, loadTeams, loadSchedule,
   loadHistory, loadThanks, loadStaff,
-  loadResults, loadHub, loadGuessBoard
-} from './content.js?v=20261005-07';
-import { initAuth, setAuthChangeCallback } from './auth.js?v=20261005-07';
-import { initTools, renderToolsPanel } from './tools.js?v=20261005-07';
-import { renderKingTimeline } from './king.js';
-import { showActionNotice } from './ui-toast.js';
+  loadGuessBoard
+} from './content.js?v=20261006-17';
+import { initAuth, setAuthChangeCallback } from './auth.js?v=20261006-17';
+import { initTools, renderToolsPanel } from './tools.js?v=20261006-17';
+import { renderMinePage } from './mine.js?v=20261006-17';
+import { showActionNotice } from './ui-toast.js?v=20261006-17';
 
 window.app = {
   loadAnnouncements,
@@ -31,11 +31,9 @@ function ensureTabLoaded(name) {
   if (name === 'tools')    renderToolsPanel();
   if (name === 'teams')    loadTeams();
   if (name === 'schedule') loadSchedule();
-  if (name === 'hub')      loadHub();
-  if (name === 'results')  loadResults();
   if (name === 'board')    loadGuessBoard();
   if (name === 'about')    { loadHistory(); loadThanks(); loadStaff(); }
-  if (name === 'king')     renderKingTimeline();
+  if (name === 'mine')     renderMinePage();
 }
 
 setTabChangeCallback((name) => {

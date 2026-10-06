@@ -94,35 +94,11 @@ export const TOOLS_DEF = [
     desc: '查看与队伍相关的比赛，提交首发选手名单'
   },
   {
-    id: 'rooms',
-    section: 'referee',
-    icon: '🏠',
-    title: '比赛房间',
-    desc: '创建和查看比赛房间号，供裁判与管理员使用',
-    roles: ['admin', 'judge']
-  },
-  {
     id: 'announcements',
     section: 'admin',
     icon: '📢',
     title: '公告栏管理',
     desc: '新增或删除官方公告，支持置顶与日期',
-    roles: ['admin']
-  },
-  {
-    id: 'teams',
-    section: 'admin',
-    icon: '🛡️',
-    title: '队伍管理',
-    desc: '查看各校队伍 Logo、选手名单详情',
-    roles: ['admin']
-  },
-  {
-    id: 'matchesOverview',
-    section: 'admin',
-    icon: '📊',
-    title: '比赛总览',
-    desc: '查看每场比赛的约赛时间、比分与双方首发名单',
     roles: ['admin']
   },
   {
@@ -150,14 +126,6 @@ export const TOOLS_DEF = [
     roles: ['admin']
   },
   {
-    id: 'bindSchool',
-    section: 'team',
-    icon: '🏫',
-    title: '绑定学校',
-    desc: '绑定你的队伍学校（队长，从学校列表选择）',
-    roles: ['team', 'admin']
-  },
-  {
     id: 'matchBooking',
     section: 'team',
     icon: '🗓️',
@@ -172,14 +140,6 @@ export const TOOLS_DEF = [
     icon: '🔮',
     title: '赛事竞猜',
     desc: '对赛程每场比赛预测胜方，比完按比分结算积分',
-    roles: ['admin', 'beta']
-  },
-  {
-    id: 'goVote',
-    section: 'beta',
-    icon: '🔥',
-    title: '打 Call',
-    desc: '前往队伍信息 / 工作人员，为支持的队伍或人员打 Call',
     roles: ['admin', 'beta']
   }
 ];

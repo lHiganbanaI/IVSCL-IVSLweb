@@ -13,7 +13,7 @@
 <link rel="preload" as="image" href="assets/misc/promo.jpg" fetchpriority="high">
 <link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
 <link rel="apple-touch-icon" href="assets/loge/loge_IVSCL.jpg">
-<link rel="stylesheet" href="css/style.css?v=20261004-04">
+<link rel="stylesheet" href="css/style.css?v=20261006-17">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="IVSCL & IVSL 联合官网">
@@ -54,11 +54,9 @@
       <button class="tab" data-tab="about" role="tab" aria-selected="false">赛事相关</button>
       <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
       <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
-      <button class="tab" data-tab="hub" role="tab" aria-selected="false">赛事中心</button>
-      <button class="tab" data-tab="results" role="tab" aria-selected="false">赛果战报</button>
       <button class="tab" data-tab="board" role="tab" aria-selected="false">竞猜榜</button>
       <button class="tab" data-tab="tools" role="tab" aria-selected="false">网页功能</button>
-      <button class="tab" data-tab="king" role="tab" aria-selected="false">👑 我是皇帝</button>
+      <button class="tab" data-tab="mine" role="tab" aria-selected="false">我的</button>
     </nav>
   </div>
 </header>
@@ -171,6 +169,14 @@
                    loading="lazy" decoding="async" data-zoom="主办立绘 · 锯雪"
                    onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
               <div class="host-figure__ph" style="display:none">主办立绘 4</div>
+            </div>
+          </figure>
+          <figure class="host-figure">
+            <div class="host-figure__media">
+              <img src="assets/host/IVSCL_xianyu.jpg" alt="IVSCL 主办立绘 · 咸鱼"
+                   loading="lazy" decoding="async" data-zoom="主办立绘 · 咸鱼"
+                   onerror="this.style.display='none';this.nextElementSibling.style.display='grid'">
+              <div class="host-figure__ph" style="display:none">主办立绘 5</div>
             </div>
           </figure>
         </div>
@@ -370,34 +376,6 @@
     </div>
   </section>
 
-  <section class="panel" data-panel="hub">
-    <div class="wrap">
-      <div class="page-head">
-        <p class="eyebrow">HUB</p>
-        <h2>赛事中心</h2>
-        <p class="sub">赛程对阵、赛果战报与竞猜积分一站总览</p>
-      </div>
-
-      <section class="schedule-board" id="hubBoard" aria-live="polite" aria-busy="true">
-        <div class="board__state">正在加载赛事中心…</div>
-      </section>
-    </div>
-  </section>
-
-  <section class="panel" data-panel="results">
-    <div class="wrap">
-      <div class="page-head">
-        <p class="eyebrow">RESULTS</p>
-        <h2>赛果战报</h2>
-        <p class="sub">已完赛的对阵、比分与胜负</p>
-      </div>
-
-      <section class="schedule-board" id="resultsBoard" aria-live="polite" aria-busy="true">
-        <div class="board__state">正在加载赛果…</div>
-      </section>
-    </div>
-  </section>
-
   <section class="panel" data-panel="board">
     <div class="wrap">
       <div class="page-head">
@@ -439,31 +417,15 @@
     </div>
   </section>
 
-  <!-- 👑 我是皇帝 -->
-  <section class="panel" data-panel="king">
+  <!-- 我的 -->
+  <section class="panel" data-panel="mine">
     <div class="wrap">
       <div class="page-head">
-        <p class="eyebrow">KING</p>
-        <h2>👑 我是皇帝</h2>
-        <p class="sub">本页面记录本站自上线以来的所有更新内容</p>
+        <p class="eyebrow">ME</p>
+        <h2>我的</h2>
+        <p class="sub">我的信息 · 我的战队 · 我的比赛，一键直达</p>
       </div>
-
-      <div class="king-intro">
-        <div class="king-intro__crown">👑</div>
-        <div class="king-intro__text">
-          <div class="king-intro__title">圣旨到！</div>
-          <div class="king-intro__desc">以下为本站的更新日志，每一次改动都记录在此。愿诸位玩家尽兴。</div>
-        </div>
-      </div>
-
-      <div class="king-timeline" id="kingTimeline"></div>
-
-      <div class="cta reveal">
-        <div class="cta__inner">
-          <h2 class="cta__title">谢主隆恩</h2>
-          <p class="cta__desc">如果对本站有建议或想反馈 Bug，请联系赛事组委会。</p>
-        </div>
-      </div>
+      <div id="mineContent"></div>
     </div>
   </section>
 
@@ -572,19 +534,12 @@
   </div>
 </div>
 
-<div class="modal-mask" id="toolModal" aria-hidden="true">
-  <div class="modal tool-modal" role="dialog" aria-modal="true" aria-label="工具">
-    <button class="modal__close" id="toolModalClose" aria-label="关闭">✕</button>
-    <div id="toolModalContent"></div>
-  </div>
-</div>
-
 <div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-label="图片预览">
   <button class="lightbox__close" id="lightboxClose" aria-label="关闭预览">✕</button>
   <img class="lightbox__img" id="lightboxImg" src="" alt="">
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261005-07"></script>
+<script type="module" src="js/main.js?v=20261006-17"></script>
 </body>
 </html>

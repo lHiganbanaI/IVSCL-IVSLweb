@@ -9,7 +9,7 @@ import {
   HISTORY_LOGO_DIR, HISTORY_LOGO_EXT,
   THANKS_SUB_MAP,
   DEFAULT_QAS, DEFAULT_HISTORY, DEFAULT_THANKS
-} from './config.js?v=20261005-07';
+} from './config.js?v=20261006-17';
 import { parseTournament } from './tournament.js';
 import { showActionNotice, showAlert, showConfirm } from './ui-toast.js';
 import { shareUrl, buildMatchShareUrl } from './share.js';
@@ -2049,6 +2049,12 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
       }
 
       const collapsed = idx >= INITIAL_LIMIT;
+      const _nm = (s) => nameMap[s] || s || '轮空';
+      const lineTextHtml = finished && appointment.score_a != null && appointment.score_b != null
+        ? `<div class="schedule-card__line">${sanitize(decided
+            ? `${_nm(p.a)} 以 ${appointment.score_a}:${appointment.score_b} 战胜 ${_nm(p.b)}`
+            : `${_nm(p.a)} 与 ${_nm(p.b)} 战成 ${appointment.score_a}:${appointment.score_b} 平手`)}</div>`
+        : '';
       return `
         <div class="schedule-card ${appointment?.is_finished ? 'schedule-card--finished' : ''}"
              role="button" tabindex="0"
@@ -2064,6 +2070,7 @@ export function renderSchedule(list, container, title, logoMap, nameMap, schedul
           <div class="schedule-card__center">
             <span class="schedule-card__state ${appointment?.is_finished ? 'schedule-card__state--finished' : appointment ? 'schedule-card__state--scheduled' : ''}">${appointment?.is_finished ? '已完赛' : appointment ? '已约赛 · 未完赛' : '待约赛'}</span>
             ${centerMain}
+            ${lineTextHtml}
             ${appointmentTime}
             ${appointmentStaff}
           </div>
