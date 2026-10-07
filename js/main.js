@@ -1,54 +1,48 @@
 /* ============================================================
-   入口文件：初始化所有模块，注册跨模块回调
+   入口文件：装配各领域控制器，注册 tab 加载映射
+   @file js/main.js
 ============================================================ */
-
-import { initUI, setTabChangeCallback } from './ui.js?v=20261006-17';
+import { initUI, setTabChangeCallback } from './ui.js?v=20261006-27';
 import {
   initContent,
   loadAnnouncements, loadTeams, loadSchedule,
   loadHistory, loadThanks, loadStaff,
   loadGuessBoard
-} from './content.js?v=20261006-17';
-import { initAuth, setAuthChangeCallback } from './auth.js?v=20261006-17';
-import { initTools, renderToolsPanel } from './tools.js?v=20261006-17';
-import { renderMinePage } from './mine.js?v=20261006-17';
-import { showActionNotice } from './ui-toast.js?v=20261006-17';
+} from './content.js?v=20261006-27';
+import { initAuth, setAuthChangeCallback } from './auth.js?v=20261006-27';
+import { renderMinePage } from './mine.js?v=20261006-27';
+import { showActionNotice } from './ui-toast.js?v=20261006-27';
 
+/* 对外门面：暴露常用加载器 / toast */
 window.app = {
   loadAnnouncements,
   loadTeams,
   loadSchedule,
-  renderToolsPanel,
   showActionNotice
+};
+
+/* tab → 加载器（声明式映射，新增 tab 只需加一行） */
+const TAB_LOADERS = {
+  teams:    () => loadTeams(),
+  schedule: () => loadSchedule(),
+  board:    () => loadGuessBoard(),
+  about:    () => { loadHistory(); loadThanks(); loadStaff(); },
+  mine:     () => renderMinePage()
 };
 
 const __tabLoaded = new Set();
 
 function ensureTabLoaded(name) {
-  if (__tabLoaded.has(name)) return;
+  if (__tabLoaded.has(name) || !TAB_LOADERS[name]) return;
   __tabLoaded.add(name);
-
-  if (name === 'tools')    renderToolsPanel();
-  if (name === 'teams')    loadTeams();
-  if (name === 'schedule') loadSchedule();
-  if (name === 'board')    loadGuessBoard();
-  if (name === 'about')    { loadHistory(); loadThanks(); loadStaff(); }
-  if (name === 'mine')     renderMinePage();
+  TAB_LOADERS[name]();
 }
 
-setTabChangeCallback((name) => {
-  ensureTabLoaded(name);
-});
-
-setAuthChangeCallback(() => {
-  renderToolsPanel();
-  loadSchedule();
-});
+setTabChangeCallback(ensureTabLoaded);
+setAuthChangeCallback(() => loadSchedule());
 
 initUI();
 initContent();
 initAuth();
-initTools();
 
-const initialTab = (location.hash.replace('#', '') || 'home');
-ensureTabLoaded(initialTab);
+ensureTabLoaded(location.hash.replace('#', '') || 'home');

@@ -13,7 +13,7 @@
 <link rel="preload" as="image" href="assets/misc/promo.jpg" fetchpriority="high">
 <link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
 <link rel="apple-touch-icon" href="assets/loge/loge_IVSCL.jpg">
-<link rel="stylesheet" href="css/style.css?v=20261006-17">
+<link rel="stylesheet" href="css/style.css?v=20261006-27">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="IVSCL & IVSL 联合官网">
@@ -55,7 +55,6 @@
       <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
       <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
       <button class="tab" data-tab="board" role="tab" aria-selected="false">竞猜榜</button>
-      <button class="tab" data-tab="tools" role="tab" aria-selected="false">网页功能</button>
       <button class="tab" data-tab="mine" role="tab" aria-selected="false">我的</button>
     </nav>
   </div>
@@ -363,6 +362,8 @@
         <div class="board__state">正在加载赛程…</div>
       </section>
 
+      <div id="scheduleAdmin"></div>
+
       <div class="cta reveal">
         <div class="cta__inner">
           <h2 class="cta__title">对阵安排出炉了</h2>
@@ -381,25 +382,14 @@
       <div class="page-head">
         <p class="eyebrow">GUESS BOARD</p>
         <h2>竞猜榜</h2>
-        <p class="sub">场次竞猜积分与冠军竞猜公开排行</p>
+        <p class="sub">赛事竞猜 · 场次与冠军公开排行</p>
       </div>
+
+      <div id="guessCenter"></div>
 
       <section class="schedule-board" id="boardBoard" aria-live="polite" aria-busy="true">
         <div class="board__state">正在加载竞猜榜…</div>
       </section>
-    </div>
-  </section>
-
-  <section class="panel" data-panel="tools">
-    <div class="wrap">
-      <div class="page-head">
-        <p class="eyebrow">TOOLS</p>
-        <h2>网页功能</h2>
-        <p class="sub">根据账号身份解锁对应功能 · 未登录只能查看公开工具</p>
-      </div>
-
-      <div id="toolsIntro"></div>
-      <div id="toolsContent"></div>
     </div>
   </section>
 
@@ -540,6 +530,6 @@
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261006-17"></script>
+<script type="module" src="js/main.js?v=20261006-27"></script>
 </body>
 </html>

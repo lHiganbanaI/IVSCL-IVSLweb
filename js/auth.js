@@ -2,7 +2,7 @@
    账号系统：登录、注册、登出、按钮渲染
 ============================================================ */
 
-import { ROLE_LABELS } from './config.js?v=20261006-17';
+import { ROLE_LABELS } from './config.js?v=20261006-27';
 import { apiRequest, getCurrentUser, setToken } from './api.js';
 import { showError, hideError, getInitialFromName } from './utils.js';
 
@@ -79,6 +79,14 @@ function notifyAuthChange() {
   renderAccountButton();
   renderAccountModal();
   if (typeof onAuthChange === 'function') onAuthChange();
+}
+
+/* 登录 / 注册后从后端恢复头像（跨设备 / 清缓存后头像不丢失） */
+async function fetchServerAvatar() {
+  try {
+    const d = await apiRequest('/api/user');
+    if (d.user && d.user.avatar) setCachedAvatar(d.user.avatar);
+  } catch (e) {}
 }
 
 /* ============================================================
@@ -165,6 +173,7 @@ function initLogin() {
         body: JSON.stringify({ phone, password: pwd })
       });
       setToken(data.token);
+      await fetchServerAvatar();
       notifyAuthChange();
     } catch (err) {
       showError('loginError', err.message);
@@ -209,6 +218,7 @@ function initRegister() {
         body: JSON.stringify({ phone, username, password: pwd, inviteCode: codeIn })
       });
       setToken(data.token);
+      await fetchServerAvatar();
       notifyAuthChange();
     } catch (err) {
       showError('registerError', err.message);

@@ -4,13 +4,13 @@
 
 import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
-} from './config.js?v=20261006-17';
+} from './config.js?v=20261006-27';
 import { apiRequest, getCurrentUser } from './api.js';
 import {
   sanitize, getInitialFromName,
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
-import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-17';
+import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-27';
 import {
   TOURNAMENT_TYPES,
   TOURNAMENT_TYPE_LABELS,
@@ -20,13 +20,31 @@ import {
   DoubleElimination,
   GroupStage
 } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js?v=20261006-17';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-27';
 
 /* 双保险：把入口挂到 window */
 window.__openMyMatchesPage = window.__openMyMatchesPage || openMyMatchesPage;
 
 const teamSchoolCache = new Map();
 const teamSchoolRequests = new Map();
+
+/* ============================================================
+   工具注册表 · ToolsRegistry
+   每个工具以 (box) => Promise 的 loader 形式注册，mount 时按 id 分发。
+   新增工具只需 register 一次，mountTool / openToolInline 无需改动（开闭原则）。
+============================================================ */
+export class ToolsRegistry {
+  constructor() { this.tools = new Map(); }
+  register(toolId, loader) { this.tools.set(toolId, loader); }
+  has(toolId) { return this.tools.has(toolId); }
+  async mount(toolId, box) {
+    if (!box) return;
+    box.innerHTML = '<div class="board__state">加载中…</div>';
+    const loader = this.tools.get(toolId);
+    if (!loader) { box.innerHTML = '<div class="tool-modal__info">该工具暂不可用。</div>'; return; }
+    await loader(box);
+  }
+}
 
 function userHasRole(role, allowed) {
   if (!allowed || !allowed.length) return true;
@@ -163,6 +181,13 @@ export function renderToolsPanel() {
 }
 
 /* ============================================================
+   工具挂载：把单个工具渲染进任意容器（供各 tab 内嵌复用）
+============================================================ */
+export async function mountTool(toolId, box) {
+  await toolsRegistry.mount(toolId, box);
+}
+
+/* ============================================================
    工具内嵌工作区（点击工具卡后在此渲染，替代弹窗）
 ============================================================ */
 async function openToolInline(toolId) {
@@ -184,14 +209,7 @@ async function openToolInline(toolId) {
   if (back) back.addEventListener('click', () => renderToolsPanel());
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  if (toolId === 'announcements') await loadAnnouncementsTool(box);
-  else if (toolId === 'draw') { box.innerHTML = renderDrawTool(); bindDrawEvents(); loadDrawResult(); }
-  else if (toolId === 'schedule') await loadScheduleTool(box);
-  else if (toolId === 'bindSchool') await loadBindSchoolTool(box);
-  else if (toolId === 'matchBooking') await loadMatchBookingTool(box);
-  else if (toolId === 'guess') await loadGuessTool(box);
-  else if (toolId === 'adminHub') await loadAdminHub(box);
-  else box.innerHTML = '<div class="tool-modal__info">该工具暂不可用。</div>';
+  await toolsRegistry.mount(toolId, box);
 }
 
 
@@ -1321,3 +1339,18 @@ function renderGuessBoard(box, board) {
 export function initTools() {
   // 工具已改为内嵌渲染（openToolInline），无需初始化弹窗
 }
+
+/* ============================================================
+   工具注册（注册表模式）：mountTool / openToolInline 按 id 分发
+============================================================ */
+const toolsRegistry = new ToolsRegistry();
+toolsRegistry.register('announcements', loadAnnouncementsTool);
+toolsRegistry.register('draw', async (box) => { box.innerHTML = renderDrawTool(); bindDrawEvents(); loadDrawResult(); });
+toolsRegistry.register('schedule', loadScheduleTool);
+toolsRegistry.register('bindSchool', loadBindSchoolTool);
+toolsRegistry.register('matchBooking', loadMatchBookingTool);
+toolsRegistry.register('guess', loadGuessTool);
+toolsRegistry.register('adminHub', loadAdminHub);
+
+/* 兼容：暴露注册表，便于外部按需注册新工具 */
+export { toolsRegistry };
