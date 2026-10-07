@@ -254,12 +254,17 @@ function bindMyMatchesExtras(content) {
       });
     });
   }
-  /* 折叠：切换首发区显示 */
-  content.querySelectorAll('.my-match-card__toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const card = btn.closest('.my-match-card');
+  /* 折叠：点击卡片（或右上角箭头）切换首发区显示 */
+  content.querySelectorAll('.my-match-card').forEach(card => {
+    const toggle = card.querySelector('.my-match-card__toggle');
+    const apply = () => {
       card.classList.toggle('is-collapsed');
-      btn.textContent = card.classList.contains('is-collapsed') ? '▸' : '▾';
+      if (toggle) toggle.textContent = card.classList.contains('is-collapsed') ? '▸' : '▾';
+    };
+    if (toggle) toggle.addEventListener('click', (e) => { e.stopPropagation(); apply(); });
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button, select, input, label')) return;
+      apply();
     });
   });
 }
@@ -312,11 +317,11 @@ function renderTeamCard(item, mySchool, teamNames, players, lineup) {
   const roundLabel = item.roundIndex ? `第 ${item.roundIndex} 轮 · ${item.roundName}` : '';
 
   return `
-    <article class="my-match-card" data-match-index="${item.index}" data-player-pos='${JSON.stringify(posMap)}'>
+    <article class="my-match-card is-collapsed" data-match-index="${item.index}" data-player-pos='${JSON.stringify(posMap)}'>
       <div class="my-match-card__head">
         <span class="my-match-card__round">${sanitize(roundLabel)}</span>
         <span class="my-match-card__status ${item.appointment?.is_finished ? 'is-finished' : item.appointment ? 'is-scheduled' : ''}">${status} · ${sanitize(timeStr)}</span>
-        <button class="my-match-card__toggle" type="button" aria-label="折叠 / 展开">▾</button>
+        <button class="my-match-card__toggle" type="button" aria-label="折叠 / 展开">▸</button>
       </div>
       <div class="my-match-card__vs">
         <span class="my-match-card__team ${mySide === 'a' ? 'is-mine' : ''}">${sanitize(aName)}</span>
@@ -386,43 +391,60 @@ function renderViewCard(item, teamNames, playersMap, lineupMap) {
   const formatLineup = (lineup, school) => {
     const players = playersMap[school] || [];
     const nameMap = new Map(players.map(p => [p.id, p]));
+
+    let survivorSlots, hunterStr;
+    const starters = new Set();
+    let subAt = '';
+    const slot = (p) => p
+      ? sanitize(p.name) + (p.cn_short ? `（${sanitize(p.cn_short)}）` : '')
+      : '未知';
+
     if (!lineup) {
-      /* 未提交：渲染对称空槽，视觉更整齐 */
-      return `
-        <div class="lineup-view__meta is-pending">未提交</div>
-        <div class="lineup-view__group">
-          <div class="lineup-view__group-label">求生者 × 4</div>
-          <div class="lineup-view__slots">${'<span class="lineup-view__slot is-empty">—</span>'.repeat(4)}</div>
-        </div>
-        <div class="lineup-view__row"><span>监管者</span><b class="is-empty">—</b></div>
-      `;
+      /* 未提交：渲染对称空槽 + 全部选手视为替补候选 */
+      survivorSlots = '<span class="lineup-view__slot is-empty">—</span>'.repeat(4);
+      hunterStr = '<b class="is-empty">—</b>';
+    } else {
+      try {
+        const s = JSON.parse(lineup.starters);
+        survivorSlots = (s.survivors || []).map(id => {
+          const p = nameMap.get(Number(id));
+          return `<span class="lineup-view__slot">${slot(p)}</span>`;
+        }).join('') || '<span class="lineup-view__slot is-empty">—</span>'.repeat(4);
+        const hunter = nameMap.get(Number(s.hunter));
+        hunterStr = hunter ? `<b>${slot(hunter)}</b>` : '<b>未知</b>';
+        (s.survivors || []).forEach(id => starters.add(Number(id)));
+        starters.add(Number(s.hunter));
+        subAt = lineup.updated_at ? ' · ' + formatBeijing(lineup.updated_at) : '';
+      } catch { return '<span class="lineup-view__pending">⚠ 数据异常</span>'; }
     }
-    try {
-      const s = JSON.parse(lineup.starters);
-      const survivorList = (s.survivors || []).map(id => {
-        const p = nameMap.get(Number(id));
-        return `<span class="lineup-view__slot">${p ? sanitize(p.name) + (p.cn_short ? `（${sanitize(p.cn_short)}）` : '') : '未知'}</span>`;
-      });
-      const hunter = nameMap.get(Number(s.hunter));
-      const hunterStr = hunter ? sanitize(hunter.name) + (hunter.cn_short ? `（${sanitize(hunter.cn_short)}）` : '') : '未知';
-      const subAt = lineup.updated_at ? ' · ' + formatBeijing(lineup.updated_at) : '';
-      return `
-        <div class="lineup-view__meta is-done">已提交${sanitize(subAt)}</div>
-        <div class="lineup-view__group">
-          <div class="lineup-view__group-label">求生者 × 4</div>
-          <div class="lineup-view__slots">${survivorList.join('') || '<span class="lineup-view__slot is-empty">—</span>'}</div>
-        </div>
-        <div class="lineup-view__row"><span>监管者</span><b>${hunterStr}</b></div>
-      `;
-    } catch { return '<span class="lineup-view__pending">⚠ 数据异常</span>'; }
+
+    /* 替补 = 队伍选手中未进入首发的 */
+    const bench = players.filter(p => !starters.has(Number(p.id)));
+    const benchStr = bench.length
+      ? bench.map(p => `
+        <span class="lineup-view__bench-item">${sanitize(p.name)}${p.cn_short ? `（${sanitize(p.cn_short)}）` : ''}${p.position ? `<em>${sanitize(p.position)}</em>` : ''}</span>`).join('')
+      : '<span class="lineup-view__bench-item is-empty">暂无替补</span>';
+
+    return `
+      <div class="lineup-view__meta ${lineup ? 'is-done' : 'is-pending'}">${lineup ? '已提交' + sanitize(subAt) : '未提交'}</div>
+      <div class="lineup-view__group">
+        <div class="lineup-view__group-label">求生者 × 4</div>
+        <div class="lineup-view__slots">${survivorSlots}</div>
+      </div>
+      <div class="lineup-view__row"><span>监管者</span>${hunterStr}</div>
+      <div class="lineup-view__group lineup-view__bench">
+        <div class="lineup-view__group-label">替补 · ${bench.length} 人</div>
+        <div class="lineup-view__bench-list">${benchStr}</div>
+      </div>
+    `;
   };
 
   return `
-    <article class="my-match-card">
+    <article class="my-match-card is-collapsed">
       <div class="my-match-card__head">
         <span class="my-match-card__round">${sanitize(roundLabel)}</span>
         <span class="my-match-card__status ${item.appointment?.is_finished ? 'is-finished' : item.appointment ? 'is-scheduled' : ''}">${status} · ${sanitize(timeStr)}</span>
-        <button class="my-match-card__toggle" type="button" aria-label="折叠 / 展开">▾</button>
+        <button class="my-match-card__toggle" type="button" aria-label="折叠 / 展开">▸</button>
       </div>
       <div class="my-match-card__vs">
         <span class="my-match-card__team">${sanitize(aName)}</span>

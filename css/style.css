@@ -1943,7 +1943,7 @@ main{flex:1;position:relative;z-index:1}
 .my-matches-summary b { color: var(--gold-lt); font-weight: 900; font-size: 15px; margin: 0 2px; }
 .my-matches-search{width:100%;padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid var(--line-strong);color:#e6edf7;font:inherit;font-size:13px;margin:2px 0 16px}
 .my-matches-search:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,180,122,.14)}
-.my-matches-list { display: flex; flex-direction: column; gap: 18px; }
+.my-matches-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
 
 .my-matches-empty {
   padding: 60px 24px;
@@ -2023,7 +2023,7 @@ main{flex:1;position:relative;z-index:1}
 .my-match-lineup__meta { margin-left: auto; font-size: 11px; font-weight: 800; color: var(--cyan-lt); letter-spacing: .5px; }
 .my-match-lineup__meta--pending { color: #ffb3c0; }
 
-.lineup-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.lineup-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .lineup-slot { display: flex; flex-direction: column; gap: 6px; }
 .lineup-slot label { font-size: 11px; font-weight: 900; letter-spacing: 1px; color: var(--gold-lt); }
 .lineup-slot select {
@@ -2089,6 +2089,18 @@ main{flex:1;position:relative;z-index:1}
 .mine-empty__icon{font-size:44px;margin-bottom:16px}
 .mine-empty__title{font-size:18px;font-weight:900;color:#fff;margin-bottom:8px}
 .mine-empty__desc{font-size:13px;line-height:1.8;max-width:420px;margin:0 auto 20px}
+/* —— 赛程管理区 / 竞猜中心 / 公告管理 —— */
+.schedule-admin{margin-top:24px}
+.schedule-admin__head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.schedule-admin__head h3{font-size:16px;font-weight:900;color:#fff}
+.schedule-admin__head em{font-style:normal;font-size:10px;font-weight:900;letter-spacing:1.4px;margin-left:auto;color:var(--gold-lt)}
+.schedule-admin__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px}
+.schedule-admin__box{margin-top:16px}
+.guess-center{margin-bottom:24px}
+.guess-center__head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.guess-center__head h3{font-size:16px;font-weight:900;color:#fff}
+.guess-center__head em{font-style:normal;font-size:10px;font-weight:900;letter-spacing:1.4px;margin-left:auto;color:var(--gold-lt)}
+.board__admin-btn{margin-left:auto;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:rgba(212,180,122,.15);border:1px solid rgba(212,180,122,.4);color:var(--gold-lt);cursor:pointer}
 .mine-changelog{margin-top:28px}
 .mine-changelog__toggle{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;padding:6px 0;cursor:pointer;color:inherit;margin-bottom:4px}
 .mine-changelog__toggle .mine-changelog__tt{font-size:15px;font-weight:900;letter-spacing:.6px;color:#fff}
@@ -2097,9 +2109,14 @@ main{flex:1;position:relative;z-index:1}
 .mine-changelog.is-open .mine-changelog__arrow{transform:rotate(90deg)}
 .lineup-view__group{margin-bottom:8px}
 .lineup-view__group-label{font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.lineup-view__slots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.lineup-view__slots{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .lineup-view__slot{display:block;padding:6px 4px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid var(--line-soft);color:#e6edf7;font-size:12px;text-align:center;font-weight:700;word-break:break-all;overflow-wrap:break-word}
 .lineup-view__slot.is-empty{color:var(--muted)}
+.lineup-view__bench{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-soft)}
+.lineup-view__bench-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.lineup-view__bench-item{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:#e6edf7}
+.lineup-view__bench-item em{font-style:normal;font-size:10px;font-weight:800;margin-left:4px;color:var(--gold-lt)}
+.lineup-view__bench-item.is-empty{color:var(--muted)}
 
 /* ============================================================
    比赛总览

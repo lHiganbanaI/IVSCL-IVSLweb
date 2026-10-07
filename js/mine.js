@@ -3,12 +3,12 @@
 ============================================================ */
 import { apiRequest, getCurrentUser } from './api.js';
 import { sanitize } from './utils.js';
-import { ROLE_LABELS } from './config.js?v=20261006-17';
-import { getCachedAvatar } from './auth.js?v=20261006-17';
-import { fetchTeams } from './content.js?v=20261006-17';
+import { ROLE_LABELS } from './config.js?v=20261006-27';
+import { getCachedAvatar } from './auth.js?v=20261006-27';
+import { fetchTeams, mountToolInto } from './content.js?v=20261006-27';
 import { parseTournament } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js?v=20261006-17';
-import { renderKingTimeline } from './king.js?v=20261006-17';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-27';
+import { renderKingTimeline } from './king.js?v=20261006-27';
 
 export async function renderMinePage() {
   const box = document.getElementById('mineContent');
@@ -126,6 +126,16 @@ export async function renderMinePage() {
           <button class="btn btn--primary btn--sm" id="mineOpenMatches" type="button">查看我的比赛</button>
         </div>
       </div>
+
+      ${u.role === 'admin' ? `
+      <div class="mine-card mine-card--admin">
+        <div class="mine-card__head"><h3>公告管理</h3><em>ANNOUNCE</em></div>
+        <div class="mine-inline-empty" style="padding:6px 0">新增或删除官方公告，支持置顶与日期</div>
+        <div class="mine-card__actions">
+          <button class="btn btn--primary btn--sm" id="mineAnnounceBtn" type="button">进入公告管理</button>
+        </div>
+        <div id="mineAnnounceBox"></div>
+      </div>` : ''}
     </div>
 
     <div class="mine-changelog" id="mineChangelog">
@@ -150,6 +160,8 @@ export async function renderMinePage() {
     document.getElementById('accountBtn')?.click();
     setTimeout(() => document.getElementById('profileUploadAvatar')?.click(), 350);
   });
+  const annBtn = box.querySelector('#mineAnnounceBtn');
+  if (annBtn) annBtn.addEventListener('click', () => mountToolInto('announcements', 'mineAnnounceBox'));
 
   /* 网站更新日志（置于最底部，默认折叠，点击标题展开） */
   const changelog = box.querySelector('#mineChangelog');
