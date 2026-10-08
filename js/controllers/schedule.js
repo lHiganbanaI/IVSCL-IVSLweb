@@ -410,15 +410,21 @@ export class ScheduleController {
            </button>`
         : '';
 
+      const isFirstRound = g.round.index === 1;
       return `
-        <section class="schedule-round" data-round="${g.round.index}" data-expanded="false">
+        <section class="schedule-round" data-round="${g.round.index}" data-collapsed="${isFirstRound ? 'true' : 'false'}">
           <div class="schedule-round__head">
             <span class="schedule-round__index">第 ${g.round.index} 轮</span>
             <h4 class="schedule-round__name">${sanitize(g.round.name || '')}</h4>
             <span class="schedule-round__count">${g.items.length} 场</span>
+            <button class="schedule-round__toggle" type="button" aria-expanded="${isFirstRound ? 'false' : 'true'}">
+              ${isFirstRound ? '展开' : '收起'}
+            </button>
           </div>
-          <div class="schedule-grid">${cards}</div>
-          ${moreBtn}
+          <div class="schedule-round__body" ${isFirstRound ? 'hidden' : ''}>
+            <div class="schedule-grid">${cards}</div>
+            ${moreBtn}
+          </div>
         </section>
       `;
     }).join('');
@@ -481,6 +487,22 @@ export class ScheduleController {
       });
     });
 
+    /* 整轮折叠（如 64 进 32 默认收起，32 进 16 展开） */
+    container.querySelectorAll('.schedule-round').forEach(section => {
+      const toggle = section.querySelector('.schedule-round__toggle');
+      const body = section.querySelector('.schedule-round__body');
+      if (!toggle || !body) return;
+      const applyCollapse = (next) => {
+        section.dataset.collapsed = next ? 'true' : 'false';
+        body.hidden = next;
+        toggle.setAttribute('aria-expanded', next ? 'false' : 'true');
+        toggle.textContent = next ? '展开' : '收起';
+      };
+      toggle.addEventListener('click', () => {
+        applyCollapse(section.dataset.collapsed !== 'true');
+      });
+    });
+
     const searchInput = container.querySelector('#scheduleSearch');
     const statusFilter = container.querySelector('#scheduleStatusFilter');
     const resultCount = container.querySelector('#scheduleResultCount');
@@ -510,6 +532,16 @@ export class ScheduleController {
         });
         visible += sectionVisible;
         section.hidden = sectionVisible === 0;
+        /* 搜索/筛选命中时，自动展开被整轮折叠的轮次（如默认收起的 64 进 32） */
+        if (sectionVisible > 0 && isFiltering) {
+          const body = section.querySelector('.schedule-round__body');
+          const toggle = section.querySelector('.schedule-round__toggle');
+          if (body && body.hidden) {
+            body.hidden = false;
+            section.dataset.collapsed = 'false';
+            if (toggle) { toggle.setAttribute('aria-expanded', 'true'); toggle.textContent = '收起'; }
+          }
+        }
         const moreBtn = section.querySelector('.schedule-round__more');
         if (moreBtn) {
           const totalCollapsed = cards.filter(c => c.dataset.collapsed === 'true').length;
@@ -568,7 +600,7 @@ export class ScheduleController {
           }
         });
       };
-      store.fetchTeams().then(teamData => {
+      store.fetchTeamsFull().then(teamData => {
         (teamData.teams || []).forEach(team => {
           if (!team.short) return;
           nameMap[team.short] = team.name || team.short;
@@ -642,7 +674,7 @@ export class ScheduleController {
     const box = document.getElementById(boxId);
     if (!box) return;
     try {
-      const mod = await import('../tools.js?v=20261006-27');
+      const mod = await import('../tools.js?v=20261006-29');
       if (mod.mountTool) mod.mountTool(toolId, box);
     } catch (err) {
       console.warn('[工具挂载] 失败：', err.message);

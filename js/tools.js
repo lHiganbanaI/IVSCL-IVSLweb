@@ -4,13 +4,13 @@
 
 import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
-} from './config.js?v=20261006-27';
+} from './config.js?v=20261006-29';
 import { apiRequest, getCurrentUser } from './api.js';
 import {
   sanitize, getInitialFromName,
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
-import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-27';
+import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-29';
 import {
   TOURNAMENT_TYPES,
   TOURNAMENT_TYPE_LABELS,
@@ -20,7 +20,7 @@ import {
   DoubleElimination,
   GroupStage
 } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js?v=20261006-27';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-29';
 
 /* 双保险：把入口挂到 window */
 window.__openMyMatchesPage = window.__openMyMatchesPage || openMyMatchesPage;

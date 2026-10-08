@@ -36,6 +36,18 @@ export class DataStore {
     return this._teamsPromise;
   }
 
+  /* 完整队伍数据（含 base64 logo）：赛程 / 赛果等需要展示队徽的页面使用，
+     避免依赖 /api/team-logos 单点（该接口偶发超时会导致队徽全部回退为占位图） */
+  fetchTeamsFull() {
+    if (!this._teamsFullPromise) {
+      this._teamsFullPromise = this.request('/api/teams').catch(err => {
+        this._teamsFullPromise = null;
+        throw err;
+      });
+    }
+    return this._teamsFullPromise;
+  }
+
   fetchTeamLogos() {
     if (!this._teamLogosPromise) {
       this._teamLogosPromise = this.request('/api/team-logos').catch(err => {

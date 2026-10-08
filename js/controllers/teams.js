@@ -5,7 +5,7 @@
 ============================================================ */
 import { apiRequest, getCurrentUser } from '../api.js';
 import { sanitize } from '../utils.js';
-import { TEAM_LOGO_DIR, TEAM_LOGO_EXT } from '../config.js?v=20261006-27';
+import { TEAM_LOGO_DIR, TEAM_LOGO_EXT } from '../config.js?v=20261006-29';
 import { store } from '../store.js';
 import { showActionNotice, showAlert } from '../ui-toast.js';
 import {

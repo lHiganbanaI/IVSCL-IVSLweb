@@ -12,7 +12,7 @@ import { scheduleController } from './schedule.js';
 export class HubController {
   constructor() {}
 
-  render(list, container, title, nameMap, appointments, leaderboard) {
+  render(list, container, title, nameMap, logoMap, appointments, leaderboard) {
     const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
     const board = (leaderboard || []).slice(0, 10);
 
@@ -31,7 +31,7 @@ export class HubController {
       return `
         <div class="hub-match" role="button" tabindex="0" data-hub-index="${i}"
              aria-label="查看 ${aName} 对阵 ${bName} 详情">
-          ${scheduleSideHtml(m.a, {}, nameMap, winA)}
+          ${scheduleSideHtml(m.a, logoMap, nameMap, winA)}
           <div class="hub-match__center">
             ${stateTag}
             <div class="hub-match__score">
@@ -41,7 +41,7 @@ export class HubController {
             </div>
             ${time ? `<div class="hub-match__time">${sanitize(time)}</div>` : ''}
           </div>
-          ${scheduleSideHtml(m.b, {}, nameMap, winB)}
+          ${scheduleSideHtml(m.b, logoMap, nameMap, winB)}
         </div>
       `;
     }).join('');
@@ -88,11 +88,16 @@ export class HubController {
       const flatMatches = tournament ? tournament.allMatches : (Array.isArray(s.matches) ? s.matches : []);
       const appointmentData = await store.loadAppointments(s.id).catch(() => ({ appointments: [] }));
       const appointments = appointmentData.appointments || [];
-      const td = await store.fetchTeams().catch(() => ({ teams: [] }));
+      const td = await store.fetchTeamsFull().catch(() => ({ teams: [] }));
       const nameMap = {};
-      (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
+      const logoMap = {};
+      (td.teams || []).forEach(t => {
+        if (!t.short) return;
+        nameMap[t.short] = t.name || t.short;
+        if (t.logo) logoMap[t.short] = t.logo;
+      });
       const lb = await apiRequest('/api/guesses/leaderboard?schedule_id=' + s.id).catch(() => ({ leaderboard: [] }));
-      this.render(flatMatches, box, s.title || '赛程', nameMap, appointments, lb.leaderboard || []);
+      this.render(flatMatches, box, s.title || '赛程', nameMap, logoMap, appointments, lb.leaderboard || []);
     } catch (err) {
       box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
     }

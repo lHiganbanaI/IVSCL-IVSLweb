@@ -11,7 +11,7 @@ import { scheduleController } from './schedule.js';
 export class ResultsController {
   constructor() {}
 
-  render(list, container, title, nameMap, appointments) {
+  render(list, container, title, nameMap, logoMap, appointments) {
     const appointmentByIndex = new Map(appointments.map(a => [a.match_index, a]));
     const done = list
       .map((m, i) => ({ match: m, flatIndex: i, appointment: appointmentByIndex.get(i) }))
@@ -40,7 +40,7 @@ export class ResultsController {
       return `
         <div class="result-card" role="button" tabindex="0"
              data-result-index="${flatIndex}" aria-label="查看 ${aName} 对阵 ${bName} 详情">
-          ${scheduleSideHtml(match.a, {}, nameMap, winA)}
+          ${scheduleSideHtml(match.a, logoMap, nameMap, winA)}
           <div class="result-card__center">
             <div class="result-card__score">
               <b class="${winA ? 'is-win' : ''}">${sa}</b><span>:</span><b class="${winB ? 'is-win' : ''}">${sb}</b>
@@ -48,7 +48,7 @@ export class ResultsController {
             <div class="result-card__line">${sanitize(line)}</div>
             ${time ? `<div class="result-card__time">${sanitize(time)}</div>` : ''}
           </div>
-          ${scheduleSideHtml(match.b, {}, nameMap, winB)}
+          ${scheduleSideHtml(match.b, logoMap, nameMap, winB)}
         </div>
       `;
     }).join('');
@@ -82,10 +82,15 @@ export class ResultsController {
       const flatMatches = tournament ? tournament.allMatches : (Array.isArray(s.matches) ? s.matches : []);
       const appointmentData = await store.loadAppointments(s.id).catch(() => ({ appointments: [] }));
       const appointments = appointmentData.appointments || [];
-      const td = await store.fetchTeams().catch(() => ({ teams: [] }));
+      const td = await store.fetchTeamsFull().catch(() => ({ teams: [] }));
       const nameMap = {};
-      (td.teams || []).forEach(t => { nameMap[t.short] = t.name; });
-      this.render(flatMatches, box, s.title || '赛程', nameMap, appointments);
+      const logoMap = {};
+      (td.teams || []).forEach(t => {
+        if (!t.short) return;
+        nameMap[t.short] = t.name || t.short;
+        if (t.logo) logoMap[t.short] = t.logo;
+      });
+      this.render(flatMatches, box, s.title || '赛程', nameMap, logoMap, appointments);
     } catch (err) {
       box.innerHTML = '<div class="board__state">加载失败：' + sanitize(err.message) + '</div>';
     }

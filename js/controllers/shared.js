@@ -4,7 +4,7 @@
 ============================================================ */
 import { apiRequest, getCurrentUser } from '../api.js';
 import { sanitize, formatBeijing } from '../utils.js';
-import { TEAM_LOGO_DIR, TEAM_LOGO_EXT } from '../config.js?v=20261006-27';
+import { TEAM_LOGO_DIR, TEAM_LOGO_EXT } from '../config.js?v=20261006-29';
 import { fetchVotes, voteCount, hasVoted, bindVoteButton } from '../votes.js';
 
 /* ---------------- 图片压缩（队伍 logo / 头像共用） ---------------- */

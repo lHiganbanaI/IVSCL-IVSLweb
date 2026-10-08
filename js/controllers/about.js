@@ -7,7 +7,7 @@ import {
   HISTORY_LOGO_DIR, HISTORY_LOGO_EXT,
   THANKS_SUB_MAP,
   DEFAULT_HISTORY, DEFAULT_THANKS
-} from '../config.js?v=20261006-27';
+} from '../config.js?v=20261006-29';
 import { store } from '../store.js';
 import { canVote, hydrateVoteButtons } from './shared.js';
 
