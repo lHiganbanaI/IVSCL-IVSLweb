@@ -25,13 +25,15 @@ export const TOURNAMENT_TYPE_LABELS = {
    Round —— 一个轮次
 ============================================================ */
 export class Round {
-  constructor({ index = 1, name = '', fromCount = 0, toCount = 0, matches = [], bracket = 'main' }) {
+  constructor({ index = 1, name = '', fromCount = 0, toCount = 0, matches = [], bracket = 'main', startDate = '', endDate = '' }) {
     this.index     = index;       // 轮次序号，从 1 开始
     this.name      = name;        // 显示名："64 进 32"、"半决赛"
     this.fromCount = fromCount;   // 本轮开打队伍数
     this.toCount   = toCount;     // 本轮结束剩余队伍数
     this.matches   = matches;     // [{ a, b, winner?, scoreA?, scoreB? }]
     this.bracket   = bracket;     // main | winner | loser | final | group
+    this.startDate = startDate;   // 轮次开始日期，如 "2026-10-01"
+    this.endDate   = endDate;     // 轮次结束日期，如 "2026-10-07"
   }
 
   get matchCount() { return this.matches.length; }
@@ -41,6 +43,20 @@ export class Round {
     return this.matches.every(m => m.winner === 'a' || m.winner === 'b');
   }
 
+  /* 轮次时间范围显示，如 "10.01–10.07"；无时间返回空串 */
+  get dateLabel() {
+    if (!this.startDate && !this.endDate) return '';
+    const fmt = (s) => {
+      if (!s) return '';
+      const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? `${m[2]}.${m[3]}` : s;
+    };
+    const a = fmt(this.startDate);
+    const b = fmt(this.endDate);
+    if (a && b) return `${a}–${b}`;
+    return a || b || '';
+  }
+
   toJSON() {
     return {
       index: this.index,
@@ -48,7 +64,9 @@ export class Round {
       fromCount: this.fromCount,
       toCount: this.toCount,
       bracket: this.bracket,
-      matches: this.matches
+      matches: this.matches,
+      startDate: this.startDate,
+      endDate: this.endDate
     };
   }
 
@@ -59,7 +77,9 @@ export class Round {
       fromCount: Number(o.fromCount) || 0,
       toCount: Number(o.toCount) || 0,
       bracket: o.bracket || 'main',
-      matches: Array.isArray(o.matches) ? o.matches : []
+      matches: Array.isArray(o.matches) ? o.matches : [],
+      startDate: String(o.startDate || ''),
+      endDate: String(o.endDate || '')
     });
   }
 }

@@ -416,6 +416,7 @@ export class ScheduleController {
           <div class="schedule-round__head">
             <span class="schedule-round__index">第 ${g.round.index} 轮</span>
             <h4 class="schedule-round__name">${sanitize(g.round.name || '')}</h4>
+            ${g.round.dateLabel ? `<span class="schedule-round__date">${g.round.dateLabel}</span>` : ''}
             <span class="schedule-round__count">${g.items.length} 场</span>
             <button class="schedule-round__toggle" type="button" aria-expanded="${isFirstRound ? 'false' : 'true'}">
               ${isFirstRound ? '展开' : '收起'}
@@ -674,7 +675,7 @@ export class ScheduleController {
     const box = document.getElementById(boxId);
     if (!box) return;
     try {
-      const mod = await import('../tools.js?v=20261006-29');
+      const mod = await import('../tools.js?v=20261006-32');
       if (mod.mountTool) mod.mountTool(toolId, box);
     } catch (err) {
       console.warn('[工具挂载] 失败：', err.message);

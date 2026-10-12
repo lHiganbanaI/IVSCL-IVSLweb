@@ -3,12 +3,12 @@
 ============================================================ */
 import { apiRequest, getCurrentUser } from './api.js';
 import { sanitize } from './utils.js';
-import { ROLE_LABELS } from './config.js?v=20261006-29';
-import { getCachedAvatar } from './auth.js?v=20261006-29';
-import { fetchTeams, mountToolInto } from './content.js?v=20261006-29';
+import { ROLE_LABELS } from './config.js?v=20261006-32';
+import { getCachedAvatar } from './auth.js?v=20261006-32';
+import { fetchTeams, mountToolInto } from './content.js?v=20261006-32';
 import { parseTournament } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js?v=20261006-29';
-import { renderKingTimeline } from './king.js?v=20261006-29';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-32';
+import { renderKingTimeline } from './king.js?v=20261006-32';
 
 export async function renderMinePage() {
   const box = document.getElementById('mineContent');

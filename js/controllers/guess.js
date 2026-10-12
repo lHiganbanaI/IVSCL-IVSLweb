@@ -10,12 +10,12 @@ import { scheduleController } from './schedule.js';
 export class GuessController {
   constructor() {}
 
-  /* 竞猜中心（管理员 / 绝版内测可进入，挂载竞猜工具） */
+  /* 竞猜中心（所有登录用户可进入，挂载竞猜工具） */
   renderCenter() {
     const box = document.getElementById('guessCenter');
     if (!box) return;
     const u = getCurrentUser();
-    if (!u || !['admin', 'beta'].includes(u.role)) { box.innerHTML = ''; return; }
+    if (!u) { box.innerHTML = ''; return; }
     box.innerHTML = `
       <div class="guess-center">
         <div class="guess-center__head"><h3>赛事竞猜</h3><em>GUESS</em></div>
@@ -26,28 +26,43 @@ export class GuessController {
 
   renderBoardPage(box, title, board, cb, nameMap) {
     const nm = (s) => nameMap[s] || s;
+    const medals = ['🥇', '🥈', '🥉'];
+    const rankCell = (i) => i < 3
+      ? `<span class="gb-medal">${medals[i]}</span>`
+      : `<span class="gb-rank-num">#${i + 1}</span>`;
+
     const matchRows = (board || []).length
-      ? board.map((p, i) => `
-          <li class="gb-row">
-            <b class="gb-row__rank">#${i + 1}</b>
+      ? board.map((p, i) => {
+          const pct = p.total ? Math.round((p.correct / p.total) * 100) : 0;
+          return `
+          <li class="gb-row${i < 3 ? ` is-top${i + 1}` : ''}">
+            <b class="gb-row__rank">${rankCell(i)}</b>
             <span class="gb-row__name">${sanitize(p.username)}</span>
-            <em class="gb-row__score">${p.correct} / ${p.total} 场</em>
-          </li>`).join('')
-      : '<li class="gb-empty">暂无竞猜记录</li>';
+            <span class="gb-row__bar"><i style="width:${pct}%"></i></span>
+            <em class="gb-row__score">${p.correct}<small>/${p.total}</small></em>
+          </li>`;
+        }).join('')
+      : '<li class="gb-empty">暂无竞猜记录，成为第一个预测的人吧</li>';
 
     const champRows = (cb.leaderboard || []).length
       ? cb.leaderboard.map((p, i) => `
-          <li class="gb-row">
-            <b class="gb-row__rank">#${i + 1}</b>
+          <li class="gb-row${i < 3 ? ` is-top${i + 1}` : ''}">
+            <b class="gb-row__rank">${rankCell(i)}</b>
             <span class="gb-row__name">${sanitize(p.username)}</span>
             <span class="gb-row__pick">→ ${sanitize(nm(p.pick))}</span>
-            <em class="gb-row__score">${cb.settled ? (p.correct ? '✓ 猜中' : '✗') : '·'}</em>
+            <em class="gb-row__score gb-row__score--flag">${cb.settled ? (p.correct ? '✓ 猜中' : '✗') : '待揭晓'}</em>
           </li>`).join('')
       : '<li class="gb-empty">暂无冠军竞猜记录</li>';
 
     box.innerHTML = `
       <div class="gb">
-        <div class="gb__head"><h3 class="gb__title">${sanitize(title)}</h3><span class="gb__count">公开排行榜</span></div>
+        <div class="gb-hero">
+          <span class="gb-hero__icon">🔮</span>
+          <div class="gb-hero__text">
+            <h3>${sanitize(title)}</h3>
+            <p>赛事竞猜 · 场次与冠军公开排行</p>
+          </div>
+        </div>
         <section class="gb-block">
           <div class="gb-block__head"><h4>场次竞猜积分</h4><span class="gb-block__note">按猜中数排序</span></div>
           <ul class="gb-list">${matchRows}</ul>

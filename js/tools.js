@@ -4,13 +4,13 @@
 
 import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
-} from './config.js?v=20261006-29';
+} from './config.js?v=20261006-32';
 import { apiRequest, getCurrentUser } from './api.js';
 import {
   sanitize, getInitialFromName,
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
-import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-29';
+import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-32';
 import {
   TOURNAMENT_TYPES,
   TOURNAMENT_TYPE_LABELS,
@@ -20,7 +20,7 @@ import {
   DoubleElimination,
   GroupStage
 } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js?v=20261006-29';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-32';
 
 /* 双保险：把入口挂到 window */
 window.__openMyMatchesPage = window.__openMyMatchesPage || openMyMatchesPage;
@@ -1024,12 +1024,12 @@ function renderPlayersList(list, school) {
 }
 
 /* ============================================================
-   赛事竞猜（仅绝版内测人与管理员）
+   赛事竞猜（所有登录用户可用）
 ============================================================ */
 async function loadGuessTool(box) {
   const u = getCurrentUser();
-  if (!u || !['admin', 'beta'].includes(u.role)) {
-    box.innerHTML = '<div class="tool-modal__info">仅绝版内测人与管理员可用。</div>';
+  if (!u) {
+    box.innerHTML = '<div class="tool-modal__info">请先登录后参与竞猜。</div>';
     return;
   }
 
@@ -1193,38 +1193,63 @@ function renderGuessList(box, matches, nameMap, scheduleId) {
     const statusTag = finished
       ? (m.correct ? '<span class="guess-status is-correct">✓ 猜中</span>' : '<span class="guess-status is-wrong">✗ 未中</span>')
       : (booked && !started
-          ? '<span class="guess-status is-open">已约赛 · 待开赛</span>'
-          : booked ? '<span class="guess-status is-closed">已开赛 · 预测截止</span>' : '<span class="guess-status is-locked">待约赛</span>');
+          ? '<span class="guess-status is-open">可预测</span>'
+          : booked ? '<span class="guess-status is-closed">已截止</span>' : '<span class="guess-status is-locked">待约赛</span>');
     const lockedText = booked ? '该场比赛已开始，预测已截止' : '该场尚未约赛，暂不能预测';
+
+    let pickHtml;
+    if (finished) {
+      pickHtml = `<div class="guess-row__done">${statusTag}</div>`;
+    } else if (booked && !started) {
+      pickHtml = `
+        <div class="guess-pick" data-match="${m.match_index}">
+          <button type="button" class="guess-pick__team${m.pick === m.team_a ? ' is-selected' : ''}" data-side="a">${sanitize(aName)}</button>
+          <span class="guess-pick__vs">VS</span>
+          <button type="button" class="guess-pick__team${m.pick === m.team_b ? ' is-selected' : ''}" data-side="b">${sanitize(bName)}</button>
+        </div>
+        <button class="btn btn--primary btn--sm guess-pick__save" data-guess-save="${m.match_index}" type="button">
+          ${m.pick ? '更新预测' : '提交预测'}
+        </button>`;
+    } else {
+      pickHtml = `<div class="guess-row__done"><span class="guess-row__locked">${lockedText}</span></div>`;
+    }
+
     return `
-      <div class="guess-row">
+      <div class="guess-row" data-match-row="${m.match_index}">
         <div class="guess-row__vs">
           <b>${sanitize(aName)}</b><em>VS</em><b>${sanitize(bName)}</b>
           ${finished ? `<span class="guess-row__score">${sanitize(scoreStr)}</span>` : ''}
+          ${!finished ? statusTag : ''}
         </div>
-        <div class="guess-row__pick">
-          ${finished ? statusTag : (booked && !started ? `
-            <label><input type="radio" name="guess_${m.match_index}" value="${sanitize(m.team_a)}" ${m.pick === m.team_a ? 'checked' : ''}> ${sanitize(aName)}</label>
-            <label><input type="radio" name="guess_${m.match_index}" value="${sanitize(m.team_b)}" ${m.pick === m.team_b ? 'checked' : ''}> ${sanitize(bName)}</label>
-            <button class="btn btn--primary btn--sm" data-guess-save="${m.match_index}" type="button">提交</button>
-          ` : `<span class="guess-row__locked">${lockedText}</span>`)}
-        </div>
+        <div class="guess-row__pick">${pickHtml}</div>
       </div>
     `;
   }).join('') || '<div class="tool-list__empty">暂无对阵</div>';
 
+  /* 队伍点选：同一行内互斥选中 */
+  list.querySelectorAll('.guess-pick').forEach(group => {
+    group.querySelectorAll('.guess-pick__team').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('.guess-pick__team').forEach(b => b.classList.remove('is-selected'));
+        btn.classList.add('is-selected');
+      });
+    });
+  });
+
   list.querySelectorAll('[data-guess-save]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const mi = btn.dataset.guessSave;
-      const sel = list.querySelector(`input[name="guess_${mi}"]:checked`);
-      if (!sel) { showActionNotice('请先选择预测的队伍', true); return; }
+      const row = list.querySelector(`.guess-pick[data-match="${mi}"]`);
+      const sel = row && row.querySelector('.guess-pick__team.is-selected');
+      if (!sel) { showActionNotice('请先点击选择你预测胜方的队伍', true); return; }
+      const pick = sel.dataset.side === 'a' ? matches[Number(mi)].team_a : matches[Number(mi)].team_b;
       const orig = btn.textContent;
       btn.disabled = true;
       btn.textContent = '提交中…';
       try {
         await apiRequest('/api/guesses', {
           method: 'POST',
-          body: JSON.stringify({ schedule_id: scheduleId, match_index: Number(mi), pick: sel.value })
+          body: JSON.stringify({ schedule_id: scheduleId, match_index: Number(mi), pick })
         });
         showActionNotice('竞猜已提交');
         await loadGuessTool(box);

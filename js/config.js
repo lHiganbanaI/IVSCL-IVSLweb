@@ -136,11 +136,11 @@ export const TOOLS_DEF = [
   },
   {
     id: 'guess',
-    section: 'beta',
+    section: 'public',
     icon: '🔮',
     title: '赛事竞猜',
     desc: '对赛程每场比赛预测胜方，比完按比分结算积分',
-    roles: ['admin', 'beta']
+    requiresAuth: true
   }
 ];
 
