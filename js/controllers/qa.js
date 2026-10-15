@@ -3,7 +3,7 @@
    @file js/controllers/qa.js
 ============================================================ */
 import { sanitize } from '../utils.js';
-import { DEFAULT_QAS } from '../config.js?v=20261006-32';
+import { DEFAULT_QAS } from '../config.js?v=20261006-45';
 
 export class QAController {
   constructor() { this.board = '[data-board="qas"]'; }

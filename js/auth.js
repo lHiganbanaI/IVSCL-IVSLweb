@@ -2,7 +2,7 @@
    账号系统：登录、注册、登出、按钮渲染
 ============================================================ */
 
-import { ROLE_LABELS } from './config.js?v=20261006-32';
+import { ROLE_LABELS } from './config.js?v=20261006-45';
 import { apiRequest, getCurrentUser, setToken } from './api.js';
 import { showError, hideError, getInitialFromName } from './utils.js';
 

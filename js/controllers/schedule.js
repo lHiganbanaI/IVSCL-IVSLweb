@@ -675,7 +675,7 @@ export class ScheduleController {
     const box = document.getElementById(boxId);
     if (!box) return;
     try {
-      const mod = await import('../tools.js?v=20261006-32');
+      const mod = await import('../tools.js?v=20261006-45');
       if (mod.mountTool) mod.mountTool(toolId, box);
     } catch (err) {
       console.warn('[工具挂载] 失败：', err.message);

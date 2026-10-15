@@ -10,10 +10,9 @@
 <meta name="description" content="IVSCL & IVSL 联合赛季官方赛事网站。2026 年 10 月 1 日开赛，报名通道现已开启，欢迎各高校战队参与。">
 <meta name="keywords" content="IVSCL,IVSL,高校电竞,电子竞技,联合赛季,2026,报名">
 
-<link rel="preload" as="image" href="assets/misc/promo.jpg" fetchpriority="high">
 <link rel="icon" type="image/jpeg" href="assets/loge/loge_IVSCL.jpg">
 <link rel="apple-touch-icon" href="assets/loge/loge_IVSCL.jpg">
-<link rel="stylesheet" href="css/style.css?v=20261006-27">
+<link rel="stylesheet" href="css/style.css?v=20261006-45">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="IVSCL & IVSL 联合官网">
@@ -28,7 +27,7 @@
 <body>
 
 <header class="topbar">
-  <div class="wrap topbar__inner">
+  <div class="topbar__inner">
     <a class="brand" href="#home" data-goto="home" aria-label="返回主页">
       <span class="brand__marks">
         <img class="brand__logo" src="assets/loge/loge_IVSCL.jpg" alt="IVSCL logo" decoding="async">
@@ -41,22 +40,31 @@
       </span>
     </a>
 
-    <div class="topbar__actions">
+    <nav class="tabs" role="tablist" aria-label="主导航">
+      <div class="sidebar__group">
+        <div class="sidebar__title">赛事</div>
+        <button class="tab is-active" data-tab="home" role="tab" aria-selected="true">主页</button>
+        <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
+        <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
+        <button class="tab" data-tab="about" role="tab" aria-selected="false">赛事相关</button>
+      </div>
+      <div class="sidebar__group">
+        <div class="sidebar__title">互动</div>
+        <button class="tab" data-tab="board" role="tab" aria-selected="false">竞猜榜</button>
+      </div>
+      <div class="sidebar__group">
+        <div class="sidebar__title">我的</div>
+        <button class="tab" data-tab="mine" role="tab" aria-selected="false">个人中心</button>
+      </div>
+    </nav>
+
+    <div class="topbar__actions sidebar__foot">
       <button class="account-btn" id="accountBtn" type="button">
         <span class="account-btn__icon" id="accountBtnIcon">👤</span>
         <span class="account-btn__text" id="accountBtnText">登录 / 注册</span>
         <span class="account-btn__role" id="accountBtnRole" hidden></span>
       </button>
     </div>
-
-    <nav class="tabs" role="tablist" aria-label="主导航">
-      <button class="tab is-active" data-tab="home" role="tab" aria-selected="true">主页</button>
-      <button class="tab" data-tab="about" role="tab" aria-selected="false">赛事相关</button>
-      <button class="tab" data-tab="teams" role="tab" aria-selected="false">队伍信息</button>
-      <button class="tab" data-tab="schedule" role="tab" aria-selected="false">赛程信息</button>
-      <button class="tab" data-tab="board" role="tab" aria-selected="false">竞猜榜</button>
-      <button class="tab" data-tab="mine" role="tab" aria-selected="false">我的</button>
-    </nav>
   </div>
 </header>
 
@@ -66,7 +74,7 @@
     <div class="wrap">
       <div class="hero-board">
         <h1 class="hero-board__title">赛事公告墙</h1>
-        <p class="hero-board__sub">最新动态 · 赛事宣传片 · 主办信息</p>
+        <p class="hero-board__sub">最新动态 · 今日赛程 · 主办信息</p>
       </div>
 
       <div class="stage">
@@ -96,8 +104,8 @@
         <div class="film">
           <span class="film__badge">OFFICIAL FILM · 官方宣传片</span>
           <div class="film__media">
-            <img src="assets/misc/promo.jpg" alt="IVSCL & IVSL 联合赛季宣传图"
-                 fetchpriority="high" decoding="async" data-zoom="宣传图">
+            <img src="assets/misc/promo.jpg" alt="IVSCL 官方宣传片"
+                 fetchpriority="high" decoding="async">
           </div>
           <div class="film__bar">
             <b>联合赛季</b>
@@ -107,30 +115,24 @@
         </div>
       </div>
 
-      <section class="bulletins reveal">
-        <div class="bulletins__grid">
-          <div class="board">
-            <div class="board__head">
-              <span class="board__dot" aria-hidden="true"></span>
-              <span class="board__title">官方公告栏</span>
-              <span class="board__count" data-count="announcements">--</span>
-            </div>
-            <ul class="board__list" data-board="announcements" aria-live="polite" aria-busy="true">
-              <li class="board__state">正在加载公告…</li>
-            </ul>
-          </div>
-          <div class="board">
-            <div class="board__head">
-              <span class="board__dot" aria-hidden="true"></span>
-              <span class="board__title">赛事 Q&amp;A</span>
-              <span class="board__count" data-count="qas">--</span>
-            </div>
-            <ul class="board__list qa-list" data-board="qas" aria-live="polite" aria-busy="true">
-              <li class="board__state">正在加载 Q&amp;A…</li>
-            </ul>
+      <div class="chat chat--full">
+        <div class="chat__head">
+          <span class="board__dot" aria-hidden="true"></span>
+          <span class="board__title">赛事动态</span>
+          <span class="board__sub">LIVE FEED</span>
+        </div>
+        <div class="chat__body">
+          <div class="chat__list" data-board="feed" aria-live="polite" aria-busy="true">
+            <div class="board__state">正在加载动态…</div>
           </div>
         </div>
-      </section>
+        <div class="chat__qa">
+          <button class="chat__qa-toggle" type="button" id="chatQaToggle">
+            <span>❓ 常见问题 Q&amp;A</span><span class="chat__qa-arrow" aria-hidden="true">▾</span>
+          </button>
+          <ul class="board__list qa-list chat__qa-list" data-board="qas" hidden aria-busy="true"></ul>
+        </div>
+      </div>
 
       <section class="hosts reveal">
         <div class="hosts__head">
@@ -530,6 +532,6 @@
   <span class="lightbox__hint">点击空白处或按 ESC 关闭</span>
 </div>
 
-<script type="module" src="js/main.js?v=20261006-27"></script>
+<script type="module" src="js/main.js?v=20261006-45"></script>
 </body>
 </html>

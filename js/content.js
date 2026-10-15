@@ -17,6 +17,7 @@ import { scheduleController } from './controllers/schedule.js';
 import { resultsController } from './controllers/results.js';
 import { hubController } from './controllers/hub.js';
 import { guessController } from './controllers/guess.js';
+import { feedController } from './controllers/feed.js';
 
 /* 兼容 re-export：toast */
 export { showActionNotice, showAlert, showConfirm };
@@ -68,8 +69,7 @@ export const renderGuessCenter = () => guessController.renderCenter();
 
 /* 首屏内容 */
 export function initContent() {
-  loadAnnouncements();
-  loadQAs();
+  feedController.load();
   loadHomeSchedule();
   loadHomeResults();
 }

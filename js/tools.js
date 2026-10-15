@@ -4,13 +4,13 @@
 
 import {
   TOOLS_DEF, SECTION_LABELS, SECTION_ORDER, ROLE_LABELS
-} from './config.js?v=20261006-32';
+} from './config.js?v=20261006-45';
 import { apiRequest, getCurrentUser } from './api.js';
 import {
   sanitize, getInitialFromName,
   formatBeijing, beijingISOFromLocal, beijingLocalFromISO
 } from './utils.js';
-import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-32';
+import { fetchTeams, invalidateTeams, showActionNotice, showMatchDetails } from './content.js?v=20261006-45';
 import {
   TOURNAMENT_TYPES,
   TOURNAMENT_TYPE_LABELS,
@@ -20,7 +20,7 @@ import {
   DoubleElimination,
   GroupStage
 } from './tournament.js';
-import { openMyMatchesPage } from './my-matches.js?v=20261006-32';
+import { openMyMatchesPage } from './my-matches.js?v=20261006-45';
 
 /* 双保险：把入口挂到 window */
 window.__openMyMatchesPage = window.__openMyMatchesPage || openMyMatchesPage;
@@ -1067,7 +1067,8 @@ async function loadGuessTool(box) {
       <div id="champBlock">加载中…</div>
     </section>
     <section class="tool-modal__section">
-      <div class="tool-modal__section-head"><h4>对阵预测</h4><span class="tool-modal__count" id="guessCount">${(mine.matches || []).length} 场</span></div>
+      <div class="tool-modal__section-head"><h4>对阵预测</h4><span class="tool-modal__count" id="guessCount"></span></div>
+      <div id="guessReminder"></div>
       <div class="guess-list" id="guessList"></div>
     </section>
     <section class="tool-modal__section">
@@ -1184,25 +1185,61 @@ function renderChampionBlock(box, champ, nameMap, scheduleId) {
 function renderGuessList(box, matches, nameMap, scheduleId) {
   const list = box.querySelector('#guessList');
   const nm = (s) => nameMap[s] || s || '轮空';
-  list.innerHTML = matches.map(m => {
+  const isStarted = (m) => !!m.is_booked && !!m.start_time && new Date(m.start_time).getTime() <= Date.now();
+
+  /* 只显示未结算的（可预测 / 待约赛 / 已截止），已完赛历史归入「我的竞猜」 */
+  const visible = matches.filter(m => !m.is_finished);
+
+  /* 新约赛提醒：已约赛、尚未开始、我还没选的场次 */
+  const reminderEl = box.querySelector('#guessReminder');
+  const openable = visible.filter(m => m.is_booked && !isStarted(m) && !m.pick);
+  const seenKey = 'ivscl_guess_seen_' + scheduleId;
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(seenKey) || '[]'); } catch (e) {}
+  const fresh = openable.filter(m => !seen.includes(m.match_index));
+
+  if (reminderEl) {
+    reminderEl.innerHTML = fresh.length
+      ? `<div class="guess-reminder">🔔 有 <b>${fresh.length}</b> 场新约赛可预测：${fresh.slice(0,3).map(m => `${nm(m.team_a)} VS ${nm(m.team_b)}`).join('、')}${fresh.length > 3 ? ' 等' : ''}</div>`
+      : '';
+  }
+
+  /* 竞猜榜 tab 小红点 */
+  const tab = document.querySelector('.tab[data-tab="board"]');
+  if (tab) {
+    let dot = tab.querySelector('.tab__dot');
+    if (fresh.length && !dot) {
+      dot = document.createElement('i');
+      dot.className = 'tab__dot';
+      dot.title = `${fresh.length} 场待预测`;
+      tab.appendChild(dot);
+    } else if (!fresh.length && dot) {
+      dot.remove();
+    }
+  }
+
+  /* 进入页面即把当前可预测场次记为已读，下次只提醒新增 */
+  try {
+    const allIdx = openable.map(m => m.match_index);
+    localStorage.setItem(seenKey, JSON.stringify([...new Set([...seen, ...allIdx])]));
+  } catch (e) {}
+
+  const countEl = box.querySelector('#guessCount');
+  if (countEl) countEl.textContent = visible.length + ' 场';
+
+  list.innerHTML = visible.map(m => {
     const aName = nm(m.team_a), bName = nm(m.team_b);
-    const finished = m.is_finished;
     const booked = !!m.is_booked;
-    const started = booked && !!m.start_time && new Date(m.start_time).getTime() <= Date.now();
-    const scoreStr = finished ? `${m.score_a}:${m.score_b}` : '';
-    const statusTag = finished
-      ? (m.correct ? '<span class="guess-status is-correct">✓ 猜中</span>' : '<span class="guess-status is-wrong">✗ 未中</span>')
-      : (booked && !started
-          ? '<span class="guess-status is-open">可预测</span>'
-          : booked ? '<span class="guess-status is-closed">已截止</span>' : '<span class="guess-status is-locked">待约赛</span>');
+    const started = isStarted(m);
+    const statusTag = (booked && !started)
+      ? '<span class="guess-status is-open">可预测</span>'
+      : booked ? '<span class="guess-status is-closed">已截止</span>' : '<span class="guess-status is-locked">待约赛</span>';
     const lockedText = booked ? '该场比赛已开始，预测已截止' : '该场尚未约赛，暂不能预测';
 
     let pickHtml;
-    if (finished) {
-      pickHtml = `<div class="guess-row__done">${statusTag}</div>`;
-    } else if (booked && !started) {
+    if (booked && !started) {
       pickHtml = `
-        <div class="guess-pick" data-match="${m.match_index}">
+        <div class="guess-pick" data-match="${m.match_index}" data-a="${sanitize(m.team_a)}" data-b="${sanitize(m.team_b)}">
           <button type="button" class="guess-pick__team${m.pick === m.team_a ? ' is-selected' : ''}" data-side="a">${sanitize(aName)}</button>
           <span class="guess-pick__vs">VS</span>
           <button type="button" class="guess-pick__team${m.pick === m.team_b ? ' is-selected' : ''}" data-side="b">${sanitize(bName)}</button>
@@ -1218,13 +1255,12 @@ function renderGuessList(box, matches, nameMap, scheduleId) {
       <div class="guess-row" data-match-row="${m.match_index}">
         <div class="guess-row__vs">
           <b>${sanitize(aName)}</b><em>VS</em><b>${sanitize(bName)}</b>
-          ${finished ? `<span class="guess-row__score">${sanitize(scoreStr)}</span>` : ''}
-          ${!finished ? statusTag : ''}
+          ${statusTag}
         </div>
         <div class="guess-row__pick">${pickHtml}</div>
       </div>
     `;
-  }).join('') || '<div class="tool-list__empty">暂无对阵</div>';
+  }).join('') || '<div class="tool-list__empty">暂无对阵，比赛约赛后即可预测</div>';
 
   /* 队伍点选：同一行内互斥选中 */
   list.querySelectorAll('.guess-pick').forEach(group => {
@@ -1242,7 +1278,7 @@ function renderGuessList(box, matches, nameMap, scheduleId) {
       const row = list.querySelector(`.guess-pick[data-match="${mi}"]`);
       const sel = row && row.querySelector('.guess-pick__team.is-selected');
       if (!sel) { showActionNotice('请先点击选择你预测胜方的队伍', true); return; }
-      const pick = sel.dataset.side === 'a' ? matches[Number(mi)].team_a : matches[Number(mi)].team_b;
+      const pick = sel.dataset.side === 'a' ? row.dataset.a : row.dataset.b;
       const orig = btn.textContent;
       btn.disabled = true;
       btn.textContent = '提交中…';

@@ -2,16 +2,16 @@
    入口文件：装配各领域控制器，注册 tab 加载映射
    @file js/main.js
 ============================================================ */
-import { initUI, setTabChangeCallback } from './ui.js?v=20261006-32';
+import { initUI, setTabChangeCallback } from './ui.js?v=20261006-45';
 import {
   initContent,
   loadAnnouncements, loadTeams, loadSchedule,
   loadHistory, loadThanks, loadStaff,
   loadGuessBoard
-} from './content.js?v=20261006-32';
-import { initAuth, setAuthChangeCallback } from './auth.js?v=20261006-32';
-import { renderMinePage } from './mine.js?v=20261006-32';
-import { showActionNotice } from './ui-toast.js?v=20261006-32';
+} from './content.js?v=20261006-45';
+import { initAuth, setAuthChangeCallback } from './auth.js?v=20261006-45';
+import { renderMinePage } from './mine.js?v=20261006-45';
+import { showActionNotice } from './ui-toast.js?v=20261006-45';
 
 /* 对外门面：暴露常用加载器 / toast */
 window.app = {
